@@ -56,3 +56,6 @@ Thumbs.db
 
 website/
 .cgcignore
+
+# Supabase CLI temp files (auto-generated on `supabase link`)
+supabase/.temp/

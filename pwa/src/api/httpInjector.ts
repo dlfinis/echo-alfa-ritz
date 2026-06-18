@@ -10,6 +10,7 @@ import {
   esProductoValido,
   esFormatoLoteValido,
 } from "@echo-alfa-ritz/shared";
+import type { CookieJar } from "./cookieJar.js";
 
 const BASE_URL = "https://promoritz.com/ec";
 
@@ -17,60 +18,21 @@ export interface HttpInjectorConfig {
   baseUrl?: string;
   email: string;
   fetchImpl?: typeof fetch;
-  /** Inyecta cookies de sesión (producidas por login()) */
-  cookieJar?: CookieJar;
-}
-
-export interface CookieJar {
-  cookies: Record<string, string>;
-  setFromResponse(headers: Headers): void;
-  toCookieHeader(): string;
-  hasSession(): boolean;
-}
-
-export class InMemoryCookieJar implements CookieJar {
-  cookies: Record<string, string> = {};
-
-  setFromResponse(headers: Headers) {
-    // Node fetch expone set-cookie como varios valores; Headers#getSetCookie existe en Node 20+
-    const setCookies =
-      typeof (headers as unknown as { getSetCookie?: () => string[] })
-        .getSetCookie === "function"
-        ? (headers as unknown as { getSetCookie: () => string[] }).getSetCookie()
-        : (headers.get("set-cookie") ?? "")
-            .split(/,(?=[^ ])/)
-            .filter(Boolean);
-
-    for (const sc of setCookies) {
-      const [pair] = sc.split(";");
-      const [name, ...rest] = pair.split("=");
-      if (name && rest.length) {
-        this.cookies[name.trim()] = rest.join("=").trim();
-      }
-    }
-  }
-
-  toCookieHeader(): string {
-    return Object.entries(this.cookies)
-      .map(([k, v]) => `${k}=${v}`)
-      .join("; ");
-  }
-
-  hasSession(): boolean {
-    // El nombre exacto de la cookie se obtiene en login(); heurística: cualquiera presente
-    return Object.keys(this.cookies).length > 0;
-  }
+  cookieJar: CookieJar;
 }
 
 /**
- * Inyector HTTP real contra promoritz.com/ec.
+ * Inyector HTTP directo contra promoritz.com/ec.
  *
- * Basado en el discovery (website-info.md):
+ * Discovery (website-info.md):
  * - Login: POST /ec/api/users/login { email } → Set-Cookie
  * - Envío: POST /ec/api/lotes { lote, product }
  *   · 200 + JSON → éxito
- *   · { limite: true, total: 12, message: "limit" } → corte
- *   · 400 → error de validación
+ *   · { limite: true, total: 12, message: "limit" } → SKIPPED
+ *   · 400 → FAILED con mensaje del servidor
+ *
+ * Validación temprana de formato (2 letras + 9 dígitos) y producto
+ * (whitelist) ANTES de gastar un roundtrip HTTP.
  */
 export class HttpInjector implements IInjectionStrategy {
   readonly nombre = "http";
@@ -84,16 +46,18 @@ export class HttpInjector implements IInjectionStrategy {
     this.baseUrl = config.baseUrl ?? BASE_URL;
     this.email = config.email;
     this.fetchImpl = config.fetchImpl ?? fetch;
-    this.jar = config.cookieJar ?? new InMemoryCookieJar();
+    this.jar = config.cookieJar;
   }
 
-  /** Ejecuta el login y guarda cookies. Devuelve true si la API respondió 200. */
+  /** Ejecuta login y guarda cookies. */
   async login(): Promise<boolean> {
     const res = await this.fetchImpl(`${this.baseUrl}/api/users/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ email: this.email }),
     });
+
     if (res.status >= 200 && res.status < 300) {
       this.jar.setFromResponse(res.headers);
       return this.jar.hasSession();
@@ -117,15 +81,8 @@ export class HttpInjector implements IInjectionStrategy {
 
     if (!this.jar.hasSession()) {
       const logged = await this.login();
-      if (!logged) {
-        return this.fail(lote, "Sin sesión activa y login falló");
-      }
+      if (!logged) return this.fail(lote, "Sin sesión activa y login falló");
     }
-
-    const payload = {
-      lote: lote.numero,
-      product: lote.producto,
-    };
 
     const res = await this.fetchImpl(`${this.baseUrl}/api/lotes`, {
       method: "POST",
@@ -133,13 +90,12 @@ export class HttpInjector implements IInjectionStrategy {
         "Content-Type": "application/json",
         Cookie: this.jar.toCookieHeader(),
       },
-      body: JSON.stringify(payload),
+      credentials: "include",
+      body: JSON.stringify({ lote: lote.numero, product: lote.producto }),
     });
 
-    // Actualizar cookies por si rotaron
     this.jar.setFromResponse(res.headers);
 
-    // Detección de límite (200 OK con cuerpo { limite: true })
     if (res.ok) {
       const body = (await res.json()) as LoteEnviado | LimiteAlcanzado;
       if ("limite" in body && body.limite === true) {
@@ -155,14 +111,13 @@ export class HttpInjector implements IInjectionStrategy {
         loteId: lote.id,
         numero: lote.numero,
         status: INJECTION_RESULT.SUCCESS,
-        mensaje: `Inyectado en promoritz (id: ${(body as LoteEnviado).id})`,
+        mensaje: `Inyectado (id: ${(body as LoteEnviado).id})`,
         timestamp: new Date().toISOString(),
       };
     }
 
     if (res.status === 400) {
-      const text = await res.text();
-      return this.fail(lote, `Validación rechazada (400): ${text}`);
+      return this.fail(lote, `Validación rechazada (400): ${await res.text()}`);
     }
 
     return this.fail(lote, `HTTP ${res.status}`);
@@ -184,30 +139,5 @@ export class HttpInjector implements IInjectionStrategy {
       mensaje,
       timestamp: new Date().toISOString(),
     };
-  }
-}
-
-/**
- * Inyector que simula la plataforma para desarrollo y testing.
- */
-export class MockInjector implements IInjectionStrategy {
-  readonly nombre = "mock";
-
-  async inyectar(lote: Lote): Promise<InjectionResult> {
-    return {
-      loteId: lote.id,
-      numero: lote.numero,
-      status: INJECTION_RESULT.SUCCESS,
-      mensaje: `[MOCK] Lote ${lote.numero} inyectado exitosamente`,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  async validarSesion(): Promise<boolean> {
-    return true;
-  }
-
-  async renovarSesion(): Promise<boolean> {
-    return true;
   }
 }

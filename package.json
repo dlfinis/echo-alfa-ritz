@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm -r dev",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "lint": "pnpm -r lint",
+    "dev": "pnpm --filter @echo-alfa-ritz/pwa dev",
+    "build": "pnpm --filter @echo-alfa-ritz/pwa build",
+    "preview": "pnpm --filter @echo-alfa-ritz/pwa preview",
+    "test": "pnpm --filter @echo-alfa-ritz/shared test && pnpm --filter @echo-alfa-ritz/pwa test",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {

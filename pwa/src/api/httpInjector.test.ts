@@ -1,16 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { HttpInjector, InMemoryCookieJar } from "./injectors.js";
-import { LOTE_ESTADO, INJECTION_RESULT } from "@echo-alfa-ritz/shared";
-import type { Lote } from "@echo-alfa-ritz/shared";
+import {
+  HttpInjector,
+  InMemoryCookieJar,
+  ProfileReader,
+} from "./index.js";
+import {
+  LOTE_ESTADO,
+  INJECTION_RESULT,
+  type Lote,
+  type LimiteAlcanzado,
+  type LoteEnviado,
+} from "@echo-alfa-ritz/shared";
 
-// Mock fetch global estilo real (no fake perfecto): graba lo que se le pide y responde según un plan
+// ── Test fixtures ──
+
 function crearFetchMock(
   plan: Array<{
     status: number;
     body?: unknown;
+    bodyText?: string;
     setCookies?: string[];
   }>,
-): { fetch: typeof fetch; calls: Array<{ url: string; init: RequestInit }> } {
+): {
+  fetch: typeof fetch;
+  calls: Array<{ url: string; init: RequestInit }>;
+} {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   let idx = 0;
 
@@ -23,8 +37,13 @@ function crearFetchMock(
     if (step.setCookies) {
       for (const c of step.setCookies) headers.append("set-cookie", c);
     }
-    headers.set("content-type", "application/json");
 
+    if (step.bodyText !== undefined) {
+      headers.set("content-type", "text/html");
+      return new Response(step.bodyText, { status: step.status, headers });
+    }
+
+    headers.set("content-type", "application/json");
     return new Response(
       step.body !== undefined ? JSON.stringify(step.body) : null,
       { status: step.status, headers },
@@ -40,6 +59,36 @@ const loteBase: Lote = {
   estado: LOTE_ESTADO.ACTIVO,
   producto: "Mini Ritz",
 };
+
+// ── InMemoryCookieJar ──
+
+describe("InMemoryCookieJar", () => {
+  it("parsea Set-Cookie y los expone en toCookieHeader", () => {
+    const jar = new InMemoryCookieJar();
+    const headers = new Headers();
+    headers.append("set-cookie", "session=abc; Path=/; HttpOnly");
+    headers.append("set-cookie", "csrf=token; Path=/");
+
+    jar.setFromResponse(headers);
+    expect(jar.cookies).toEqual({ session: "abc", csrf: "token" });
+    expect(jar.toCookieHeader()).toBe("session=abc; csrf=token");
+    expect(jar.hasSession()).toBe(true);
+  });
+
+  it("jar vacío no tiene sesión", () => {
+    const jar = new InMemoryCookieJar();
+    expect(jar.hasSession()).toBe(false);
+  });
+
+  it("clear() resetea las cookies", () => {
+    const jar = new InMemoryCookieJar();
+    jar.setFromResponse(new Headers({ "set-cookie": "a=1" }));
+    jar.clear();
+    expect(jar.hasSession()).toBe(false);
+  });
+});
+
+// ── HttpInjector ──
 
 describe("HttpInjector", () => {
   it("hace login, captura cookie y la envía en /api/lotes", async () => {
@@ -62,18 +111,18 @@ describe("HttpInjector", () => {
           referredBy: null,
           id: "lote-uuid",
           createdAt: new Date().toISOString(),
-        },
+        } satisfies LoteEnviado,
       },
     ]);
 
     const injector = new HttpInjector({
       email: "test@example.com",
       fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
     });
 
     const resultado = await injector.inyectar(loteBase);
 
-    // Login primero, luego envío
     expect(calls).toHaveLength(2);
     expect(calls[0].url).toMatch(/\/api\/users\/login$/);
     expect(JSON.parse(calls[0].init.body as string)).toEqual({
@@ -95,23 +144,20 @@ describe("HttpInjector", () => {
 
   it("detecta límite diario y marca como SKIPPED", async () => {
     const { fetch: mockFetch } = crearFetchMock([
+      { status: 200, setCookies: ["session=xyz"] },
       {
         status: 200,
-        setCookies: ["session=xyz"],
-      },
-      {
-        status: 200,
-        body: { limite: true, total: 12, message: "limit" },
+        body: { limite: true, total: 12, message: "limit" } satisfies LimiteAlcanzado,
       },
     ]);
 
     const injector = new HttpInjector({
       email: "test@example.com",
       fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
     });
 
     const resultado = await injector.inyectar(loteBase);
-
     expect(resultado.status).toBe(INJECTION_RESULT.SKIPPED);
     expect(resultado.mensaje).toContain("12");
   });
@@ -125,6 +171,7 @@ describe("HttpInjector", () => {
     const injector = new HttpInjector({
       email: "test@example.com",
       fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
     });
 
     const resultado = await injector.inyectar(loteBase);
@@ -148,24 +195,25 @@ describe("HttpInjector", () => {
           referredBy: null,
           id: "x",
           createdAt: "2026-06-18T00:00:00.000Z",
-        },
+        } satisfies LoteEnviado,
       },
     ]);
 
     const injector = new HttpInjector({
       email: "test@example.com",
       fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
     });
-    // Sin llamar login() manualmente
     await injector.inyectar(loteBase);
     expect(calls).toHaveLength(2);
   });
 
   it("FALLA sin hacer fetch si el formato del lote es inválido", async () => {
-    const { fetch: mockFetch, calls } = crearFetchMock([]); // 0 respuestas planificadas
+    const { fetch: mockFetch, calls } = crearFetchMock([]);
     const injector = new HttpInjector({
       email: "test@example.com",
       fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
     });
 
     const resultado = await injector.inyectar({
@@ -177,7 +225,7 @@ describe("HttpInjector", () => {
 
     expect(resultado.status).toBe(INJECTION_RESULT.FAILED);
     expect(resultado.mensaje).toContain("Formato inválido");
-    expect(calls).toHaveLength(0); // ninguna llamada HTTP
+    expect(calls).toHaveLength(0);
   });
 
   it("FALLA sin hacer fetch si el producto no es de la whitelist", async () => {
@@ -185,13 +233,14 @@ describe("HttpInjector", () => {
     const injector = new HttpInjector({
       email: "test@example.com",
       fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
     });
 
     const resultado = await injector.inyectar({
       id: "x",
       numero: "AB123456789",
       estado: LOTE_ESTADO.ACTIVO,
-      producto: "Producto Inventado" as never, // fuerza un valor fuera de la whitelist
+      producto: "Producto Inventado" as never,
     });
 
     expect(resultado.status).toBe(INJECTION_RESULT.FAILED);
@@ -200,21 +249,52 @@ describe("HttpInjector", () => {
   });
 });
 
-describe("InMemoryCookieJar", () => {
-  it("parsea Set-Cookie y los expone en toCookieHeader", () => {
-    const jar = new InMemoryCookieJar();
-    const headers = new Headers();
-    headers.append("set-cookie", "session=abc; Path=/; HttpOnly");
-    headers.append("set-cookie", "csrf=token; Path=/");
+// ── ProfileReader ──
 
-    jar.setFromResponse(headers);
-    expect(jar.cookies).toEqual({ session: "abc", csrf: "token" });
-    expect(jar.toCookieHeader()).toBe("session=abc; csrf=token");
-    expect(jar.hasSession()).toBe(true);
+describe("ProfileReader", () => {
+  it("parsea el contador de lotes del HTML SSR", async () => {
+    const html = `
+      <div class="text-primary bg-[#F5F5F5] w-full h-fit py-3 font-bold flex items-center justify-center text-center text-2xl">7</div>
+      <p class="font-bold text-primary">Nombres:</p>
+      <p class="border-b pb-3 border-primary">Alfa</p>
+      <p class="pt-4 font-bold text-primary">Apellidos:</p>
+      <p class="border-b pb-3 border-primary">Beta</p>
+      <p class="pt-4 font-bold text-primary">Cédula</p>
+      <p class="border-b pb-3 border-primary">1805060075</p>
+    `;
+    const { fetch: mockFetch } = crearFetchMock([{ status: 200, bodyText: html }]);
+
+    const reader = new ProfileReader({
+      fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
+    });
+
+    const snap = await reader.leer();
+    expect(snap.lotesHoy).toBe(7);
+    expect(snap.limite).toBe(12);
+    expect(snap.nombres).toBe("Alfa");
+    expect(snap.apellidos).toBe("Beta");
+    expect(snap.cedula).toBe("1805060075");
   });
 
-  it("jar vacío no tiene sesión", () => {
-    const jar = new InMemoryCookieJar();
-    expect(jar.hasSession()).toBe(false);
+  it("devuelve 0 si el HTML no contiene el contador", async () => {
+    const { fetch: mockFetch } = crearFetchMock([
+      { status: 200, bodyText: "<html><body>sin contador</body></html>" },
+    ]);
+    const reader = new ProfileReader({
+      fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
+    });
+    const snap = await reader.leer();
+    expect(snap.lotesHoy).toBe(0);
+  });
+
+  it("lanza error si la respuesta no es OK", async () => {
+    const { fetch: mockFetch } = crearFetchMock([{ status: 401 }]);
+    const reader = new ProfileReader({
+      fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
+    });
+    await expect(reader.leer()).rejects.toThrow(/401/);
   });
 });

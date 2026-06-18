@@ -1,140 +1,181 @@
 # Plan de Implementación — Echo-Alfa-Ritz
 
-> Estado al cierre del bootstrap. **20/20 tests pasan, typecheck verde.**
+> **Arquitectura actual**: PWA pura, sin backend. Deploy target: Cloudflare Pages.
 
-## Principio rector
+## Estado al cierre del refactor
 
-Cada módulo es responsable de UNA cosa (S de SOLID). Los módulos de alto nivel (`Orquestador`, `Agente`) dependen de **interfaces**, no de implementaciones concretas (D de SOLID). Esto permite:
-- Tests sin red real (inyección de mocks)
-- Cambiar `HttpInjector` por `BrowserInjector` (cuando exista) sin tocar el orquestador
-- Cambiar Supabase por otra persistencia sin tocar la lógica
+- ✅ pnpm workspace con 2 paquetes (`packages/shared/`, `pwa/`)
+- ✅ `packages/shared`: dominio cohesivo, `RotacionCiclicaRule` con 9 tests
+- ✅ `pwa/src/api/`: `InMemoryCookieJar`, `HttpInjector`, `ProfileReader`, `ExecutionOrchestrator`, `SupabaseLogWriter`
+- ✅ `pwa/src/composables/`: `useSupabase`, `useConfiguracion`, `usePoolLotes`, `useHistorial`, `useRotationRunner`
+- ✅ `pwa/src/views/`: Dashboard, Historial, Configuración funcionales (Realtime + Supabase)
+- ✅ `supabase/migrations/001_initial_schema.sql`: 3 tablas + Realtime + RLS
+- ⏳ **Pendiente**: aplicar migration SQL en Supabase; primer login real contra promoritz
 
-## Mapa de módulos
+## Diagrama de la nueva arquitectura
 
 ```
-                                ┌──────────────────────┐
-                                │   PWA (Vue 3)        │
-                                │   Realtime UI        │
-                                └─────────┬────────────┘
-                                          │ (Realtime subs)
-                                          ▼
-                                ┌──────────────────────┐
-                                │   Supabase           │
-                                │   · task_queue       │
-                                │   · config           │
-                                │   · lotes_snapshots  │
-                                │   · logs_inscripcion │
-                                │   · secrets (vault)  │
-                                └─────────┬────────────┘
-                                          │ (Realtime pub/sub)
-                                          ▼
-                                ┌──────────────────────┐
-                                │   Agent (Node.js)    │
-                                │   Loop principal     │
-                                └─────────┬────────────┘
-                                          │
-            ┌──────────────┬──────────────┼──────────────┬─────────────┐
-            ▼              ▼              ▼              ▼             ▼
-       Scheduler     ProfileReader  Orquestador   SessionManager  LogWriter
-       (¿cuándo?)   (¿cuántos hoy?) (¿qué inyectar?)(¿quién soy?) (¿qué pasó?)
-            │              │              │              │             │
-            │              │              ▼              │             │
-            │              │     IInjectionStrategy      │             │
-            │              │              │              │             │
-            │              │              ▼              │             │
-            │              │       HttpInjector         │             │
-            │              └──────► (promoritz API) ◄────┘             │
-            │                                  │                       │
-            └──────────────────────────────────┴───────────────────────┘
+                 ┌─────────────────────────────────────────────┐
+                 │            Cloudflare Pages                 │
+                 │           (static + edge SSR)               │
+                 │                                             │
+                 │   ┌─────────────────────────────────────┐   │
+                 │   │  PWA (Vue 3 SPA)                    │   │
+                 │   │                                     │   │
+                 │   │  src/api/                           │   │
+                 │   │   • HttpInjector ──┐                │   │
+                 │   │   • ProfileReader ─┤                │   │
+                 │   │   • Orchestrator   │                │   │
+                 │   │   • CookieJar      │                │   │
+                 │   │                    │ HTTPS          │   │
+                 │   │  src/composables/  │ (CORS OK?)     │   │
+                 │   │   • useRotationRunner              │   │
+                 │   │   • usePoolLotes   │                │   │
+                 │   │   • useConfig       │                │   │
+                 │   │   • useHistorial   │                │   │
+                 │   │                    │                │   │
+                 │   └─────────────┬──────┴────────────────┘   │
+                 │                 │                           │
+                 └─────────────────┼───────────────────────────┘
+                                   │
+                ┌──────────────────┴───────────────────┐
+                ▼                                      ▼
+   ┌────────────────────────┐            ┌────────────────────────┐
+   │  promoritz.com/ec      │            │  Supabase              │
+   │  /api/users/login      │            │  • pool_lotes          │
+   │  /api/lotes            │            │  • configuracion       │
+   │  /perfil (SSR)         │            │  • logs_inscripcion    │
+   │                        │            │  + Realtime pub/sub    │
+   └────────────────────────┘            └────────────────────────┘
 ```
 
-## Módulos a construir (con orden de dependencias)
+## Stack final
 
-### Fase 1 — Núcleo de inyección (✅ HECHO)
+| Capa | Tecnología | Razón |
+|------|-----------|-------|
+| Build | pnpm + Vite + TypeScript estricto | monorepo simple, TS atrapó bugs temprano |
+| UI | Vue 3 (Composition API) + PrimeVue + Tailwind v4 | PrimeVue da componentes listos, Tailwind utility-first |
+| Persistencia | Supabase (Postgres + Realtime) | sin backend propio, realtime nativo |
+| Deploy | Cloudflare Pages | edge global, gratis, SSL automático |
+| Tests | Vitest + fetch mockeado | mismo runner para unit/integration, sin red |
 
-| Módulo | Archivo | Estado | Tests |
-|--------|---------|--------|-------|
-| `RotacionCiclicaRule` | `packages/shared/src/distribution.ts` | ✅ | 9 |
-| `IInjectionStrategy` | `packages/shared/src/interfaces.ts` | ✅ | — |
-| `HttpInjector` | `agent/src/injectors.ts` | ✅ | 6 |
-| `MockInjector` | `agent/src/injectors.ts` | ✅ | — |
-| `ExecutionOrchestrator` | `agent/src/orchestrator.ts` | ✅ | 3 |
-| `InMemoryCookieJar` | `agent/src/injectors.ts` | ✅ | 2 |
-| `PRODUCTOS_VALIDOS` + validadores | `packages/shared/src/lote.ts` | ✅ | 0* |
+## Estructura de carpetas
 
-\* Validadores están en `lote.ts` pero no tienen test directo. **TODO: agregar.**
+```
+echo-alfa-ritz/
+├── pnpm-workspace.yaml
+├── package.json                 # root scripts (dev, build, test)
+├── tsconfig.base.json
+├── .env.example / .env.local    # Supabase URL + key
+├── docs/
+│   └── PLAN.md                  # este archivo
+├── supabase/
+│   └── migrations/
+│       └── 001_initial_schema.sql
+├── packages/
+│   └── shared/
+│       ├── src/
+│       │   ├── lote.ts          # Lote, Producto, PRODUCTOS_VALIDOS, validadores
+│       │   ├── api.ts           # LoteEnviado, LimiteAlcanzado, PerfilSnapshot
+│       │   ├── injection.ts     # InjectionResult, QueueItem, INJECTION_RESULT enum
+│       │   ├── interfaces.ts    # IInjectionStrategy, IRotationRule, LogWriter
+│       │   ├── distribution.ts  # RotacionCiclicaRule (pure logic)
+│       │   ├── types.ts         # ConfiguracionSistema, LogInscripcion
+│       │   ├── index.ts         # barrel
+│       │   └── distribution.test.ts
+│       ├── package.json
+│       └── tsconfig.json
+└── pwa/
+    ├── index.html
+    ├── package.json
+    ├── vite.config.ts           # vue + tailwind + alias
+    ├── tsconfig.json
+    ├── env.d.ts
+    ├── src/
+    │   ├── main.ts              # createApp + PrimeVue + router + style
+    │   ├── App.vue              # shell con header navy
+    │   ├── router.ts
+    │   ├── style.css            # tailwind + primary color
+    │   ├── api/
+    │   │   ├── cookieJar.ts
+    │   │   ├── httpInjector.ts + .test.ts
+    │   │   ├── profileReader.ts
+    │   │   ├── orchestrator.ts + .test.ts
+    │   │   ├── supabaseLogWriter.ts
+    │   │   └── index.ts
+    │   ├── composables/
+    │   │   ├── useSupabase.ts
+    │   │   ├── useConfiguracion.ts
+    │   │   ├── usePoolLotes.ts
+    │   │   ├── useHistorial.ts
+    │   │   └── useRotationRunner.ts
+    │   └── views/
+    │       ├── DashboardView.vue
+    │       ├── HistorialView.vue
+    │       └── ConfiguracionView.vue
+```
 
-### Fase 2 — Observabilidad y robustez (PRÓXIMO)
+## Principios SOLID en juego
 
-| Módulo | Responsabilidad (SRP) | Interfaz | Tests target |
-|--------|----------------------|----------|--------------|
-| `RetryPolicy` | Reintentos con backoff exponencial + jitter | `retry<T>(fn, policy): Promise<T>` | 4 |
-| `RandomDelay` | Espera aleatoria entre min/max (Regla 4 del context) | `sleep(min, max): Promise<void>` | 2 |
-| `ProfileReader` | Lee `GET /ec/perfil`, parsea SSR, devuelve `PerfilSnapshot` | `leer(): Promise<PerfilSnapshot>` | 3 |
-| `LogWriter` (interfaz) | Persiste `LogInscripcion` en Supabase | `write(log: LogInscripcion)` | mock |
+| Principio | Aplicación |
+|-----------|-----------|
+| **S (Responsabilidad Única)** | Cada archivo `api/*` hace una cosa. Cada composable encapsula una preocupación. `RotacionCiclicaRule` solo calcula; `HttpInjector` solo inyecta; `ExecutionOrchestrator` solo orquesta. |
+| **O (Abierto/Cerrado)** | `IRotationRule` y `IInjectionStrategy` permiten nuevas reglas (`RotacionPorFechaRule`) o estrategias (`PlaywrightInjector`) sin tocar el orquestador. |
+| **L (Liskov)** | Cualquier `IInjectionStrategy` sustituye a otra sin que el orquestador lo note. |
+| **I (Segregación)** | `CookieJar` y `LogWriter` son interfaces mínimas; cada implementación solo expone lo que necesita. |
+| **D (Inversión)** | `useRotationRunner` recibe `HttpInjector` y `SupabaseLogWriter` por composición (vía factory interno). Tests usan `ScriptedInjector` y `MockLogWriter` sin tocar red ni DB. |
 
-### Fase 3 — Persistencia y orquestación
+## Lo que falta para terminar
 
-| Módulo | Responsabilidad | Interfaz | Depende de |
-|--------|----------------|----------|-----------|
-| `SupabaseClient` (factory) | Construye cliente desde env | `createClient(url, key)` | `@supabase/supabase-js` |
-| `SupabaseTaskQueue` | Lee/escribe `task_queue`, transiciones de estado | `ITaskQueue` | `SupabaseClient` |
-| `SupabaseLogWriter` | Implementa `LogWriter` con tabla `logs_inscripcion` | `LogWriter` | `SupabaseClient` |
-| `SupabaseConfigRepository` | Lee/escribe `configuracion` (PWA↔Agent) | `IConfigRepository` | `SupabaseClient` |
-| `SupabaseSecretsRepository` | Lee credenciales cifradas de `secrets` | `ISecretsRepository` | `SupabaseClient` |
-| `SessionManager` | Encapsula login + renovación + persistencia de cookie | `ISessionManager` | `ISecretsRepository`, `HttpInjector` |
+### Tareas inmediatas
 
-### Fase 4 — Triggers y automatización
+1. **Aplicar migration en Supabase**
+   - Abrir SQL Editor en el dashboard de Supabase
+   - Pegar contenido de `supabase/migrations/001_initial_schema.sql`
+   - Verificar que las 3 tablas existen: `pool_lotes`, `configuracion`, `logs_inscripcion`
 
-| Módulo | Responsabilidad | Depende de |
-|--------|----------------|-----------|
-| `RealtimeListener` | Suscribe a `task_queue` Realtime (PWA → Agent) | `SupabaseTaskQueue` |
-| `Scheduler` | Cron interno: evalúa hora de ejecución, fecha de caducidad, tarea activada | `SupabaseConfigRepository` |
-| `AgentLoop` | FSM: IDLE → WAKING → EXECUTING → IDLE | Todos los anteriores |
+2. **Configurar fila inicial de configuración**
+   - La migration siembra una fila vacía
+   - Ir a Configuración en la PWA y completar el email
 
-### Fase 5 — PWA integración
+3. **Probar login real contra promoritz**
+   - Abrir Dashboard con DevTools
+   - Ejecutar carga
+   - Verificar en Network tab:
+     - `POST /ec/api/users/login` → 200 OK + Set-Cookie
+     - `POST /ec/api/lotes` → ¿qué status? ¿CORS error?
+   - Si hay CORS error → evaluar Cloudflare Worker como proxy
 
-| Componente | Responsabilidad |
-|-----------|----------------|
-| `useRealtimeLotes()` (composable) | Suscribe a `lotes_snapshots` Realtime |
-| `useRealtimeConfig()` | Suscribe a `configuracion` |
-| `useManualTrigger()` | POST a `task_queue` con `type=EXECUTE_ROTATION` |
-| `DashboardView` enriquecido | Muestra pool real desde Supabase |
-| `ConfiguracionView` funcional | Lee/escribe config desde Supabase |
-| `HistorialView` funcional | Lista `logs_inscripcion` |
-| Manifest + Service Worker | PWA instalable |
+### Features pendientes
 
-## Reglas arquitectónicas (NO ROMPER)
+- [ ] **Importar pool desde CSV** (botón en Dashboard que lee un archivo con números)
+- [ ] **Botón de pausar** durante una rotación larga
+- [ ] **Notificación push** cuando se completa una rotación (PWA install + service worker)
+- [ ] **Scheduler** (Web Worker en el browser que dispara la tarea a la hora configurada)
 
-1. **El Orquestador NUNCA importa Supabase directamente.** Solo recibe dependencias por constructor (DIP).
-2. **`HttpInjector` no conoce Supabase.** Solo habla con promoritz. La persistencia es responsabilidad de `LogWriter`.
-3. **`SessionManager` es el único que lee `secrets`.** Ningún otro módulo accede a credenciales.
-4. **Los módulos del `agent` no importan de la PWA.** Y viceversa. Solo comparten `@echo-alfa-ritz/shared`.
-5. **El `shared` no importa nada del agent ni de la PWA.** Solo tipos, interfaces, reglas puras.
-6. **`RetryPolicy` y `RandomDelay` son utilidades puras** (sin estado, sin I/O). Testables sin mocks.
+### Riesgos activos
 
-## Riesgos identificados
+| Riesgo | Mitigación |
+|--------|-----------|
+| CORS bloqueado por promoritz en producción | Migrar a Cloudflare Worker como proxy |
+| Cookies httpOnly (no capturables desde JS) | Misma mitigación: Worker server-side |
+| Límite de tiempo de ejecución en el browser (pestaña cerrada) | Service Worker con Background Sync API |
+| Realtime desconectado por timeout | Reconexión automática que Supabase maneja, pero revisar logs |
 
-- **No tenemos un proyecto Supabase real todavía.** El `secrets`, `task_queue` etc. son tipos en shared; las tablas reales se crean en otro paso. **Bloqueador para Fase 3+** (necesitamos URL + anon key).
-- **No hemos probado contra promoritz real.** El `HttpInjector` está validado contra el contrato (website-info.md) y mockeado. La primera ejecución real puede revelar:
-  - Nombre exacto de la cookie de sesión
-  - CSRF tokens rotativos
-  - Rate limits reales del servidor
-- **El login usa solo email** — sin contraseña. Esto depende del flujo real; si el servidor cambió a OAuth/2FA, hay que descubrir.
+## Cómo arrancar
 
-## Orden de implementación recomendado
+```bash
+# 1. instalar deps
+pnpm install
 
-1. **Tests faltantes de validadores** (`esProductoValido`, `esFormatoLoteValido`) — 30 min
-2. **`RetryPolicy` + `RandomDelay`** — 1 hora (testeable sin red)
-3. **`ProfileReader`** — 1.5 horas (testeable con fetch mockeado)
-4. **Decidir sobre Supabase**: ¿existe ya el proyecto? ¿Credenciales disponibles? — bloqueador
-5. **Si sí Supabase**: Fase 3 completa + Realtime listener
-6. **Si no Supabase**: trabajar con SQLite local + driver simple, dejar Supabase como capa posterior (DIP ya está)
-7. **PWA enriquecida**: composables + vistas reales
+# 2. levantar PWA en dev
+pnpm dev
+# → http://localhost:3000
 
-## Métrica de éxito
+# 3. tests
+pnpm test
+# → shared: 9, pwa/api: 14+ tests
 
-- Tests: >40 (actuales 20)
-- Cobertura: >80% en módulos de inyección/distribución (testeable)
-- Typecheck verde en los 3 paquetes
-- Una ejecución real exitosa end-to-end (login + leer perfil + calcular cola + 1 inyección + log)
+# 4. typecheck
+pnpm typecheck
+```

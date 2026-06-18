@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #002073;
+}
+
+:root {
+  --p-primary-color: #002073;
+}
+
+@layer base {
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}

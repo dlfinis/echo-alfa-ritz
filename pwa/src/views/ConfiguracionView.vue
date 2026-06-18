@@ -8,13 +8,20 @@
     </div>
     <div v-else class="bg-white rounded-lg shadow p-6 space-y-4 max-w-xl">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Email (login Promoritz)</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          Email (login Promoritz)
+        </label>
         <input
           v-model="form.email"
           type="email"
+          placeholder="tu-email@ejemplo.com"
           class="w-full border rounded px-3 py-2"
           @blur="save()"
         />
+        <p class="text-xs text-gray-500 mt-1">
+          Con este email se hace login en promoritz.com antes de cada rotación.
+          Se guarda al sacar el foco del campo.
+        </p>
       </div>
 
       <div class="flex items-center justify-between">

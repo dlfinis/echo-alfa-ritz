@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import {
   HttpInjector,
   InMemoryCookieJar,
@@ -26,6 +26,35 @@ export interface ExecuteState {
 }
 
 /**
+ * Detecta si un email es el placeholder del seed (`demo@promoritz.local`).
+ * No podemos bloquear TLDs reales (`.local` es válido en redes internas),
+ * así que solo bloqueamos la dirección exacta del placeholder.
+ */
+export const PLACEHOLDER_EMAILS = new Set([
+  "demo@promoritz.local",
+  "",
+]);
+
+/** Valida que el email sea real (no placeholder, no vacío, formato básico). */
+export function isEmailConfigured(email: string | undefined | null): boolean {
+  if (!email) return false;
+  if (PLACEHOLDER_EMAILS.has(email)) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export type ReadinessReason =
+  | "ok"
+  | "no-email"
+  | "placeholder-email"
+  | "no-pool";
+
+export interface Readiness {
+  ready: boolean;
+  reason: ReadinessReason;
+  message?: string;
+}
+
+/**
  * Composable principal: ejecuta la rotación diaria.
  * Usa InMemoryCookieJar compartido + HttpInjector + SupabaseLogWriter.
  */
@@ -41,6 +70,25 @@ export function useRotationRunner() {
     skipped: 0,
     current: 0,
     resultados: [],
+  });
+
+  const readiness = computed<Readiness>(() => {
+    const email = config.value?.email;
+    if (!email) {
+      return {
+        ready: false,
+        reason: "no-email",
+        message: "Configurá tu email de Promoritz en la pestaña Configuración",
+      };
+    }
+    if (!isEmailConfigured(email)) {
+      return {
+        ready: false,
+        reason: "placeholder-email",
+        message: `El email "${email}" parece ser un placeholder. Configurá tu email real.`,
+      };
+    }
+    return { ready: true, reason: "ok" };
   });
 
   async function fetchPool(): Promise<Lote[]> {
@@ -59,6 +107,12 @@ export function useRotationRunner() {
 
   async function execute(lotesActivos?: Lote[]) {
     if (state.value.running) return;
+
+    if (!readiness.value.ready) {
+      state.value.error = readiness.value.message;
+      return;
+    }
+
     state.value = {
       running: true,
       total: 0,
@@ -71,12 +125,12 @@ export function useRotationRunner() {
 
     try {
       const pool = lotesActivos ?? (await fetchPool());
-      if (!config.value?.email) {
-        throw new Error("Email no configurado. Ve a Configuración.");
+      if (pool.length === 0) {
+        throw new Error("Pool vacío. Agregá lotes antes de ejecutar.");
       }
 
       const injector = new HttpInjector({
-        email: config.value.email,
+        email: config.value!.email!,
         cookieJar: jar,
       });
       const logWriter = new SupabaseLogWriter(sb);
@@ -84,8 +138,8 @@ export function useRotationRunner() {
         rotationRule: new RotacionCiclicaRule(),
         injector,
         logWriter,
-        delayMinMs: (config.value.delayMinSegundos ?? 3) * 1000,
-        delayMaxMs: (config.value.delayMaxSegundos ?? 7) * 1000,
+        delayMinMs: (config.value!.delayMinSegundos ?? 3) * 1000,
+        delayMaxMs: (config.value!.delayMaxSegundos ?? 7) * 1000,
         onProgress: (r, i) => {
           state.value.current = i + 1;
           state.value.total = Math.max(state.value.total, i + 1);
@@ -103,5 +157,5 @@ export function useRotationRunner() {
     }
   }
 
-  return { state, execute };
+  return { state, execute, readiness };
 }

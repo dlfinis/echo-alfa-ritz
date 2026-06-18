@@ -5,7 +5,7 @@
     <div v-if="configError" class="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4">
       <strong>Supabase no configurado:</strong> {{ configError }}
       <br />
-      <span class="text-sm">Definí VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en .env.local</span>
+      <span class="text-sm">Definí VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en .env.local</span>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

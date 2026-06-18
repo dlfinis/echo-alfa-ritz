@@ -66,7 +66,7 @@ echo-alfa-ritz/
 ├── pnpm-workspace.yaml
 ├── package.json                 # root scripts (dev, build, test)
 ├── tsconfig.base.json
-├── .env.example / .env.local    # Supabase URL + key
+├── .env.example / .env.local    # VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY
 ├── docs/
 │   └── PLAN.md                  # este archivo
 ├── supabase/

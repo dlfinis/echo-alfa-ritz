@@ -13,11 +13,14 @@ const __dirname = dirname(__filename);
 config({ path: resolve(__dirname, "../../.env.local") });
 
 const url = process.env.VITE_SUPABASE_URL!;
-const key = process.env.VITE_SUPABASE_ANON_KEY!;
+const key =
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+  // Fallback para configs con el nombre viejo
+  process.env.VITE_SUPABASE_ANON_KEY!;
 
 if (!url || !key) {
   console.error(
-    "❌ Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env.local",
+    "❌ Faltan VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY en .env.local",
   );
   process.exit(1);
 }

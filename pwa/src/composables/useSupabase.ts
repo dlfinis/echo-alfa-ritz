@@ -5,16 +5,22 @@ let _client: SupabaseClient | null = null;
 /**
  * Cliente Supabase singleton.
  * Lee de import.meta.env (Vite inyecta VITE_SUPABASE_* desde .env.local).
+ *
+ * Usa la "publishable key" (antigua "anon key", deprecada).
+ * Formato esperado: sb_publishable_...
  */
 export function useSupabase(): SupabaseClient {
   if (_client) return _client;
 
   const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const key =
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+    // Fallback para compatibilidad con configs antiguas
+    import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!url || !key) {
     throw new Error(
-      "Supabase no configurado. Definí VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en .env.local",
+      "Supabase no configurado. Definí VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en .env.local",
     );
   }
 
@@ -26,9 +32,11 @@ export function useSupabase(): SupabaseClient {
 
 export function getSupabaseConfigError(): string | null {
   const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!url && !key) return "Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY";
+  const key =
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
+    import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (!url && !key) return "Faltan VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY";
   if (!url) return "Falta VITE_SUPABASE_URL";
-  if (!key) return "Falta VITE_SUPABASE_ANON_KEY";
+  if (!key) return "Falta VITE_SUPABASE_PUBLISHABLE_KEY";
   return null;
 }

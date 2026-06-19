@@ -1,10 +1,35 @@
-import { defineConfig } from "vite";
+import { defineConfig, type ViteDevServer } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
+function corsHeadersPlugin(): {
+  name: string;
+  configureServer: (server: ViteDevServer) => void;
+} {
+  return {
+    name: "cors-headers",
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        // CORS headers para todas las responses (incluidas las del proxy).
+        // Sin esto, el browser puede no exponer Set-Cookie al JS.
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader(
+          "Access-Control-Allow-Headers",
+          "content-type, cookie, x-requested-with",
+        );
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        // Exponer Set-Cookie para que response.headers.getSetCookie() funcione
+        res.setHeader("Access-Control-Expose-Headers", "set-cookie");
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [vue(), tailwindcss()],
+  plugins: [vue(), tailwindcss(), corsHeadersPlugin()],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
@@ -13,27 +38,11 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      // Dev-only proxy: bypasses browser CORS for calls to promoritz.
-      // In production (Cloudflare Pages), a Worker will do the same job.
-      // The proxy is server-to-server (Node fetch), so CORS does not apply.
       "/api/promoritz": {
         target: "https://promoritz.com",
-        changeOrigin: true, // rewrite Host header to match target (needed for SSL cert)
+        changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/api\/promoritz/, "/ec"),
-        // Forward Set-Cookie headers. Browser will ignore them
-        // (cross-origin from localhost) but our InMemoryCookieJar
-        // captures them from response.headers in HttpInjector.
-        configure: (proxy) => {
-          proxy.on("proxyRes", (proxyRes) => {
-            proxyRes.headers["access-control-allow-origin"] = "*";
-            proxyRes.headers["access-control-allow-credentials"] = "true";
-            proxyRes.headers["access-control-allow-headers"] =
-              "content-type, cookie, x-requested-with";
-            proxyRes.headers["access-control-allow-methods"] =
-              "GET, POST, OPTIONS";
-          });
-        },
       },
     },
   },

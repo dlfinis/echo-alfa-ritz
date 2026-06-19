@@ -109,10 +109,13 @@ echo-alfa-ritz/
     │   │   ├── usePoolLotes.ts
     │   │   ├── useHistorial.ts
     │   │   └── useRotationRunner.ts
-    │   └── views/
-    │       ├── DashboardView.vue
-    │       ├── HistorialView.vue
-    │       └── ConfiguracionView.vue
+│       └── views/
+│           ├── DashboardView.vue
+│           ├── HistorialView.vue
+│           └── ConfiguracionView.vue
+├── functions/                     # Cloudflare Pages Functions (prod)
+│   └── _middleware.ts             # Proxy /api/promoritz → promoritz.com
+└── wrangler.toml                  # Config de deploy a Cloudflare Pages
 ```
 
 ## Principios SOLID en juego

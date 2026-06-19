@@ -1,0 +1,14 @@
+# wrangler.toml — configuración de deploy a Cloudflare Pages
+#
+# Este archivo NO es leído por Vite. Es para `wrangler pages deploy`.
+# Documentación: https://developers.cloudflare.com/pages/functions/wrangler-configuration/
+
+name = "echo-alfa-ritz"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "./dist"
+
+# El secret con la service role key de Supabase iría acá si en algún
+# momento el Worker necesita escribir directamente (e.g. logging server-side).
+# NO commitear secrets. Usar `wrangler secret put SUPABASE_SERVICE_ROLE`.
+# [[vars]]
+# SUPABASE_URL = "https://cxonjoojvkmpxkessasp.supabase.co"

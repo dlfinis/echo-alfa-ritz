@@ -117,6 +117,49 @@ export function usePoolLotes() {
     await refresh();
   }
 
+  // ── Operaciones batch ──
+
+  async function updateLote(id: string, data: { producto?: string; estado?: string }) {
+    if (data.producto && !esProductoValido(data.producto)) {
+      throw new Error(`Producto inválido: "${data.producto}"`);
+    }
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (data.producto) patch.producto = data.producto;
+    if (data.estado) patch.estado = data.estado;
+    const idx = lotes.value.findIndex((l) => l.id === id);
+    if (idx >= 0) lotes.value[idx] = { ...lotes.value[idx], ...patch as unknown as Partial<LoteRow> };
+    const { error: e } = await sb.from("pool_lotes").update(patch).eq("id", id);
+    if (e) {
+      await refresh(); // revertir en caso de error
+      throw e;
+    }
+  }
+
+  async function batchToggle(ids: string[], activo: boolean) {
+    const estado = activo ? "activo" : "inactivo";
+    for (const id of ids) {
+      const idx = lotes.value.findIndex((l) => l.id === id);
+      if (idx >= 0) lotes.value[idx] = { ...lotes.value[idx], estado };
+    }
+    const { error: e } = await sb
+      .from("pool_lotes")
+      .update({ estado, updated_at: new Date().toISOString() })
+      .in("id", ids);
+    if (e) {
+      await refresh();
+      throw e;
+    }
+  }
+
+  async function batchRemove(ids: string[]) {
+    lotes.value = lotes.value.filter((l) => !ids.includes(l.id));
+    const { error: e } = await sb.from("pool_lotes").delete().in("id", ids);
+    if (e) {
+      await refresh();
+      throw e;
+    }
+  }
+
   // ── Contador de veces enviado por lote ──
   const batchCount = ref<Record<string, number>>({});
   const hoyCount = ref(0);
@@ -161,6 +204,9 @@ export function usePoolLotes() {
     toggleActivo,
     removeLote,
     editProducto,
+    updateLote,
+    batchToggle,
+    batchRemove,
     toDomain,
     batchCount,
     hoyCount,

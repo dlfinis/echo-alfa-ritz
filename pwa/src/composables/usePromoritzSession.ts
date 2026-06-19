@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { ref } from "vue";
 import {
   InMemoryCookieJar,
   HttpInjector,
@@ -30,7 +30,11 @@ export function usePromoritzSession() {
   const promoritzLimite = ref(12);
   const profileLoading = ref(false);
 
-  const isLoggedIn = computed(() => _globalJar.hasSession());
+  const isLoggedIn = ref(false);
+
+  function updateIsLoggedIn() {
+    isLoggedIn.value = _globalJar.hasSession();
+  }
 
   function parseUserCookie(): UserData | null {
     const raw = _globalJar.cookies["user"];
@@ -55,8 +59,10 @@ export function usePromoritzSession() {
     _loginPromise = (async () => {
       const injector = new HttpInjector({ email, cookieJar: _globalJar });
       const ok = await injector.login();
+      updateIsLoggedIn();
       if (ok) {
         userData.value = parseUserCookie();
+        error.value = null;
       } else {
         error.value = "Login falló contra promoritz.";
       }
@@ -70,6 +76,7 @@ export function usePromoritzSession() {
 
   function logout() {
     _globalJar.clear();
+    updateIsLoggedIn();
     userData.value = null;
     promoritzLotesHoy.value = 0;
     error.value = null;

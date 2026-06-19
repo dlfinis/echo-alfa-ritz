@@ -126,7 +126,7 @@ describe("ExecutionOrchestrator", () => {
     ]);
   });
 
-  it("detiene la rotación al recibir SKIPPED (límite diario)", async () => {
+  it("detiene la rotación al recibir SKIPPED y marca el resto como SKIPPED", async () => {
     const lotes: Lote[] = Array.from({ length: 15 }, (_, i) => ({
       id: `${i + 1}`,
       numero: `${i + 1}`,
@@ -158,9 +158,15 @@ describe("ExecutionOrchestrator", () => {
     });
 
     const resultados = await orch.executeDailyRotation(lotes);
-    expect(resultados).toHaveLength(4);
+    // Debe devolver 12 (3 success + 1 skip real + 8 skip automáticos)
+    expect(resultados).toHaveLength(12);
+    // resultados[3] es el SKIPPED original del límite
     expect(resultados[3].status).toBe(INJECTION_RESULT.SKIPPED);
-    expect(logWriter.logs).toHaveLength(4);
+    expect(resultados[3].mensaje).toContain("Límite diario");
+    // Los últimos 8 deben decir "Límite diario alcanzado — el servidor..."
+    expect(resultados[11].mensaje).toContain("Límite diario alcanzado");
+    // Todos los logs registrados (12 logs)
+    expect(logWriter.logs).toHaveLength(12);
   });
 
   it("devuelve array vacío si no hay lotes activos", async () => {

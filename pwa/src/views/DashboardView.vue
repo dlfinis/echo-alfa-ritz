@@ -57,8 +57,18 @@
       v-if="runner.state.value.running"
       class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4"
     >
-      <p class="font-semibold">Ejecutando rotación…</p>
-      <p>{{ runner.state.value.current }} / 12 — ✅ {{ runner.state.value.success }} · ❌ {{ runner.state.value.failed }} · ⏭️ {{ runner.state.value.skipped }}</p>
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="font-semibold">Ejecutando rotación…</p>
+          <p>{{ runner.state.value.current }} / {{ runner.state.value.total || 12 }} — ✅ {{ runner.state.value.success }} · ❌ {{ runner.state.value.failed }} · ⏭️ {{ runner.state.value.skipped }}</p>
+        </div>
+        <button
+          class="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700 transition"
+          @click="runner.cancel()"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
 
     <div class="bg-white rounded-lg shadow p-4 mb-4">

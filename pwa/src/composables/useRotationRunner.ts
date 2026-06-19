@@ -59,6 +59,8 @@ export interface Readiness {
  * Composable principal: ejecuta la rotación diaria.
  * Usa InMemoryCookieJar compartido + HttpInjector + SupabaseLogWriter.
  */
+let _orchestrator: ExecutionOrchestrator | null = null;
+
 export function useRotationRunner() {
   const sb = useSupabase();
   const { config } = useConfiguracion();
@@ -72,6 +74,10 @@ export function useRotationRunner() {
     current: 0,
     resultados: [],
   });
+
+  function cancel() {
+    _orchestrator?.cancel();
+  }
 
   const readiness = computed<Readiness>(() => {
     const email = config.value?.email;
@@ -148,12 +154,15 @@ export function useRotationRunner() {
         cookieJar: jarActual,
       });
       const logWriter = new SupabaseLogWriter(sb);
-      const orch = new ExecutionOrchestrator({
+      _orchestrator = new ExecutionOrchestrator({
         rotationRule: new RotacionCiclicaRule(),
         injector,
         logWriter,
         delayMinMs,
         delayMaxMs,
+        onCancel: () => {
+          state.value.skipped = state.value.total - state.value.current;
+        },
         onProgress: (r, i) => {
           state.value.current = i + 1;
           state.value.total = Math.max(state.value.total, i + 1);
@@ -163,7 +172,7 @@ export function useRotationRunner() {
         },
       });
 
-      state.value.resultados = await orch.executeDailyRotation(pool);
+      state.value.resultados = await _orchestrator.executeDailyRotation(pool);
     } catch (e) {
       state.value.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -171,5 +180,5 @@ export function useRotationRunner() {
     }
   }
 
-  return { state, execute, readiness };
+  return { state, execute, cancel, readiness };
 }

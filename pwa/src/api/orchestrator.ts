@@ -19,6 +19,8 @@ export interface OrchestratorConfig {
   delayMinMs?: number;
   delayMaxMs?: number;
   onProgress?: (resultado: InjectionResult, index: number) => void;
+  /** Se llama cuando el usuario cancela manualmente o se alcanza el límite. */
+  onCancel?: () => void;
 }
 
 export class ExecutionOrchestrator {
@@ -31,6 +33,7 @@ export class ExecutionOrchestrator {
     r: InjectionResult,
     i: number,
   ) => void;
+  private readonly onCancel?: () => void;
   private cancelled = false;
 
   constructor(config: OrchestratorConfig) {
@@ -40,6 +43,7 @@ export class ExecutionOrchestrator {
     this.delayMinMs = config.delayMinMs ?? 3000;
     this.delayMaxMs = config.delayMaxMs ?? 7000;
     this.onProgress = config.onProgress;
+    this.onCancel = config.onCancel;
   }
 
   cancel(): void {
@@ -50,9 +54,37 @@ export class ExecutionOrchestrator {
     this.cancelled = false;
     const cola = this.rotationRule.calcularCola(lotesActivos);
     const resultados: InjectionResult[] = [];
+    let limiteAlcanzado = false;
 
     for (let i = 0; i < cola.length; i++) {
-      if (this.cancelled) break;
+      if (this.cancelled || limiteAlcanzado) {
+        // Marcar los restantes como SKIPPED para que quede registro
+        const restantes = cola.slice(i);
+        for (const item of restantes) {
+          const skip: InjectionResult = {
+            loteId: item.lote.id,
+            numero: item.lote.numero,
+            status: INJECTION_RESULT.SKIPPED,
+            mensaje: limiteAlcanzado
+              ? "Límite diario alcanzado — el servidor rechazó el lote anterior"
+              : "Cancelado por el usuario",
+            timestamp: new Date().toISOString(),
+          };
+          resultados.push(skip);
+          await this.logWriter.write({
+            id: crypto.randomUUID(),
+            loteId: item.lote.id,
+            numero: item.lote.numero,
+            fecha: skip.timestamp,
+            resultado: skip.status,
+            mensaje: skip.mensaje ?? "",
+            estrategia: this.injector.nombre,
+          });
+          this.onProgress?.(skip, i);
+        }
+        this.onCancel?.();
+        break;
+      }
 
       const item = cola[i];
 
@@ -79,7 +111,9 @@ export class ExecutionOrchestrator {
 
       // Si el servidor reportó límite, paramos el ciclo
       if (resultado.status === INJECTION_RESULT.SKIPPED) {
-        break;
+        limiteAlcanzado = true;
+        // El bucle iterará y entrará en el if de arriba
+        // para marcar el resto como SKIPPED sin llamar a la API
       }
     }
 

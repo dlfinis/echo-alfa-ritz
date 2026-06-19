@@ -119,23 +119,26 @@ export function usePoolLotes() {
 
   // ── Contador de veces enviado por lote ──
   const batchCount = ref<Record<string, number>>({});
+  const hoyCount = ref(0);
 
   async function loadBatchCounts() {
-    // SELECT numero, COUNT(*) FROM logs_inscripcion
-    //   WHERE resultado='success' GROUP BY numero
+    const today = new Date().toISOString().slice(0, 10); // "2026-06-19"
     const { data, error: e } = await sb
       .from("logs_inscripcion")
-      .select("numero, resultado")
+      .select("numero, resultado, fecha")
       .eq("resultado", "success");
     if (e) {
       console.warn("Error cargando batchCount:", e.message);
       return;
     }
     const map: Record<string, number> = {};
+    let hoy = 0;
     for (const row of data ?? []) {
       map[row.numero] = (map[row.numero] ?? 0) + 1;
+      if (row.fecha?.startsWith(today)) hoy++;
     }
     batchCount.value = map;
+    hoyCount.value = hoy;
   }
 
   function toDomain(row: LoteRow): Lote {
@@ -160,6 +163,7 @@ export function usePoolLotes() {
     editProducto,
     toDomain,
     batchCount,
+    hoyCount,
     loadBatchCounts,
   };
 }

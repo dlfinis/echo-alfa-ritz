@@ -42,7 +42,11 @@
           <label for="useDelay" class="text-sm text-gray-600 cursor-pointer select-none">Usar delay configurado</label>
         </div>
         <div class="text-xs text-gray-500 pb-1">
-          Cupo diario: 12 por usuario
+          <span :class="pool.hoyCount.value >= 12 ? 'text-red-600 font-bold' : ''">
+            Enviados hoy: {{ pool.hoyCount.value }} / 12
+            <span v-if="pool.hoyCount.value >= 12" class="text-red-600"> — ¡Cupo lleno!</span>
+            <span v-else class="text-gray-500"> — faltan {{ 12 - pool.hoyCount.value }}</span>
+          </span>
         </div>
       </div>
     </div>

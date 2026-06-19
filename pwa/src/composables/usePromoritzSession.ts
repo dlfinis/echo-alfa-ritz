@@ -6,6 +6,8 @@ import {
 } from "../api/index.js";
 import { useConfiguracion } from "./useConfiguracion.js";
 
+const LS_KEY = "promoritz_session";
+
 interface UserData {
   id: string;
   name: string;
@@ -18,8 +20,42 @@ interface UserData {
   numdoc?: string;
 }
 
+/** Persiste el jar en localStorage para sobrevivir al refresh. */
+function saveJar(jar: InMemoryCookieJar) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(jar.cookies));
+  } catch {
+    // localStorage lleno o deshabilitado — ignorar
+  }
+}
+
+function loadJar(jar: InMemoryCookieJar) {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      if (parsed && typeof parsed === "object") {
+        jar.cookies = parsed;
+      }
+    }
+  } catch {
+    localStorage.removeItem(LS_KEY);
+  }
+}
+
+function clearJar() {
+  try {
+    localStorage.removeItem(LS_KEY);
+  } catch {
+    // ignorar
+  }
+}
+
 const _globalJar = new InMemoryCookieJar();
 let _loginPromise: Promise<boolean> | null = null;
+
+// Hidratar desde localStorage en el módulo (antes de cualquier render)
+loadJar(_globalJar);
 
 export function usePromoritzSession() {
   const { config } = useConfiguracion();
@@ -30,7 +66,7 @@ export function usePromoritzSession() {
   const promoritzLimite = ref(12);
   const profileLoading = ref(false);
 
-  const isLoggedIn = ref(false);
+  const isLoggedIn = ref(_globalJar.hasSession());
 
   function updateIsLoggedIn() {
     isLoggedIn.value = _globalJar.hasSession();
@@ -44,6 +80,11 @@ export function usePromoritzSession() {
     } catch {
       return null;
     }
+  }
+
+  // Si ya había sesión en localStorage, poblar userData
+  if (isLoggedIn.value) {
+    userData.value = parseUserCookie();
   }
 
   async function login(): Promise<boolean> {
@@ -62,6 +103,7 @@ export function usePromoritzSession() {
       updateIsLoggedIn();
       if (ok) {
         userData.value = parseUserCookie();
+        saveJar(_globalJar);
         error.value = null;
       } else {
         error.value = "Login falló contra promoritz.";
@@ -76,6 +118,7 @@ export function usePromoritzSession() {
 
   function logout() {
     _globalJar.clear();
+    clearJar();
     updateIsLoggedIn();
     userData.value = null;
     promoritzLotesHoy.value = 0;

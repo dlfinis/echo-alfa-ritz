@@ -11,7 +11,7 @@ export interface LoteRow {
   id: string;
   numero: string;
   producto: string;
-  estado: "activo" | "pagado" | "vencido";
+  estado: "activo" | "pagado" | "vencido" | "inactivo";
   created_at: string;
   updated_at: string;
 }
@@ -85,12 +85,18 @@ export function usePoolLotes() {
 
   async function toggleActivo(id: string, activo: boolean) {
     const estado = activo ? "activo" : "inactivo";
+    // Optimista: actualizar local primero (sin flick)
+    const idx = lotes.value.findIndex((l) => l.id === id);
+    if (idx >= 0) lotes.value[idx] = { ...lotes.value[idx], estado };
     const { error: e } = await sb
       .from("pool_lotes")
       .update({ estado, updated_at: new Date().toISOString() })
       .eq("id", id);
-    if (e) throw e;
-    await refresh();
+    if (e) {
+      // Revertir si falla
+      if (idx >= 0) lotes.value[idx] = { ...lotes.value[idx], estado: activo ? "inactivo" : "activo" };
+      throw e;
+    }
   }
 
   async function removeLote(id: string) {

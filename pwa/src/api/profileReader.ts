@@ -1,7 +1,10 @@
 import type { PerfilSnapshot } from "@echo-alfa-ritz/shared";
 import type { CookieJar } from "./cookieJar.js";
 
-const BASE_URL = "https://promoritz.com/ec";
+/**
+ * Misma URL base que HttpInjector (proxy en dev, Worker en prod).
+ */
+const BASE_URL = "/api/promoritz";
 
 export interface ProfileReaderConfig {
   baseUrl?: string;

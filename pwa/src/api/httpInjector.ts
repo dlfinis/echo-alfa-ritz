@@ -12,7 +12,18 @@ import {
 } from "@echo-alfa-ritz/shared";
 import type { CookieJar } from "./cookieJar.js";
 
-const BASE_URL = "https://promoritz.com/ec";
+/**
+ * URL base de la API de promoritz.
+ *
+ * - DEV: usa el proxy de Vite (`/api/promoritz/*` → `https://promoritz.com/ec/*`)
+ *        para evitar CORS en el browser.
+ * - PROD (Cloudflare Pages): el Worker expone la misma ruta, o se cambia
+ *        al endpoint del worker.
+ *
+ * El HttpInjector recibe `baseUrl` opcional en su config por si querés
+ * overridear por entorno.
+ */
+export const DEFAULT_BASE_URL = "/api/promoritz";
 
 export interface HttpInjectorConfig {
   baseUrl?: string;
@@ -43,7 +54,7 @@ export class HttpInjector implements IInjectionStrategy {
   private readonly jar: CookieJar;
 
   constructor(config: HttpInjectorConfig) {
-    this.baseUrl = config.baseUrl ?? BASE_URL;
+    this.baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
     this.email = config.email;
     // IMPORTANTE: fetch debe mantener el this=globalThis; si se destructura
     // y se invoca sin contexto, tira "Illegal invocation".

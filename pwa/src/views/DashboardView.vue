@@ -7,41 +7,6 @@
       <span class="block text-sm">Definí VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en .env.local</span>
     </div>
 
-    <div v-if="!configError && !runner.readiness.value.ready" class="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded mb-4 flex items-start gap-2">
-      <span class="text-xl">⚠️</span>
-      <div class="flex-1">
-        <strong class="block mb-1">{{ readinessLabel(runner.readiness.value.reason) }}</strong>
-        <span class="text-sm">{{ runner.readiness.value.message }}</span>
-        <router-link to="/configuracion" class="block mt-2 text-sm font-semibold text-amber-900 underline">→ Ir a Configuración</router-link>
-      </div>
-    </div>
-
-    <div v-if="actionError" class="bg-red-50 border border-red-200 text-red-800 rounded-lg p-3 mb-4 text-sm">
-      <strong>Error:</strong> {{ actionError }}
-      <button class="float-right text-red-500 font-bold" @click="actionError = null">✕</button>
-    </div>
-
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-      <div class="bg-white rounded-lg shadow p-4">
-        <p class="text-sm text-gray-500">Pool Activos</p>
-        <p class="text-3xl font-bold">{{ pool.lotesActivos.value.length }}</p>
-      </div>
-      <div class="bg-white rounded-lg shadow p-4">
-        <p class="text-sm text-gray-500">Total Pool</p>
-        <p class="text-3xl font-bold text-gray-700">{{ pool.lotes.value.length }}</p>
-      </div>
-      <div class="bg-white rounded-lg shadow p-4">
-        <p class="text-sm text-gray-500">En Promoritz hoy</p>
-        <p class="text-3xl font-bold" :class="promoritzHoyClass">
-          {{ session.profileLoading.value ? "…" : session.promoritzLotesHoy.value }}
-        </p>
-      </div>
-      <div class="bg-white rounded-lg shadow p-4">
-        <p class="text-sm text-gray-500">Cupo Diario</p>
-        <p class="text-3xl font-bold">12</p>
-      </div>
-    </div>
-
     <div v-if="runner.state.value.running" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
       <div class="flex items-start justify-between">
         <div>
@@ -76,17 +41,19 @@
           <input id="useDelay" type="checkbox" v-model="usarDelayConfig" class="w-4 h-4 accent-primary cursor-pointer" />
           <label for="useDelay" class="text-sm text-gray-600 cursor-pointer select-none">Usar delay configurado</label>
         </div>
+        <div class="text-xs text-gray-500 pb-1">
+          Cupo diario: 12 por usuario
+        </div>
       </div>
-      <p class="text-xs text-gray-500 mt-2">
-        La distribución es cíclica entre los lotes activos. Ej: con 4 activos y cantidad=5, envía A,B,C,D,A.
-      </p>
     </div>
 
     <!-- Pool de Lotes -->
     <div class="bg-white rounded-lg shadow p-4 mb-6">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-lg font-semibold">Pool de Lotes ({{ pool.lotes.value.length }})</h3>
-        <button class="text-xs underline text-primary hover:text-primary/70" @click="session.fetchProfile()">Sincronizar perfil</button>
+        <span class="text-xs text-gray-500">
+          {{ pool.lotesActivos.value.length }} activos
+        </span>
       </div>
       <div v-if="pool.loading.value" class="text-gray-400">Cargando…</div>
       <div v-else-if="pool.lotes.value.length === 0" class="text-gray-400">Pool vacío.</div>
@@ -96,8 +63,7 @@
             <th class="py-2 w-10"></th>
             <th class="py-2">Número</th>
             <th>Producto</th>
-            <th>Estado</th>
-            <th class="text-center">Veces enviado</th>
+            <th>Veces enviado</th>
             <th class="text-right">Acción</th>
           </tr>
         </thead>
@@ -108,8 +74,7 @@
             </td>
             <td class="font-mono">{{ l.numero }}</td>
             <td>{{ l.producto }}</td>
-            <td><span :class="l.estado === 'activo' ? 'text-green-600 font-semibold' : 'text-gray-500'">{{ l.estado }}</span></td>
-            <td class="text-center font-mono text-xs">{{ pool.batchCount.value[l.numero] ?? 0 }}</td>
+            <td class="font-mono text-xs">{{ pool.batchCount.value[l.numero] ?? 0 }}</td>
             <td class="text-right">
               <button class="text-xs text-red-600 hover:underline" @click="borrarLote(l.id, l.numero)">Borrar</button>
             </td>
@@ -118,7 +83,6 @@
       </table>
     </div>
 
-    <!-- Última ejecución -->
     <div v-if="ultimosLogs.length > 0" class="bg-white rounded-lg shadow p-4 mb-6">
       <h3 class="text-lg font-semibold mb-2">Última ejecución</h3>
       <div class="space-y-1 text-xs">
@@ -131,25 +95,23 @@
       </div>
     </div>
 
-    <!-- Botón ejecutar -->
     <div class="flex flex-col items-center gap-2">
       <button
         class="bg-primary text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-primary/90 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="runner.state.value.running || !runner.readiness.value.ready || pool.lotesActivos.value.length === 0"
+        :disabled="runner.state.value.running || pool.lotesActivos.value.length === 0"
         @click="ejecutar"
       >
         {{ runner.state.value.running ? "Ejecutando…" : "Ejecutar Carga Ahora" }}
       </button>
-      <p v-if="!runner.readiness.value.ready" class="text-xs text-amber-700">Botón deshabilitado — resolvé la configuración primero</p>
-      <p v-else-if="pool.lotesActivos.value.length === 0" class="text-xs text-gray-500">Sin lotes activos</p>
+      <p v-if="pool.lotesActivos.value.length === 0" class="text-xs text-gray-500">Sin lotes activos</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, onMounted } from "vue";
 import { usePoolLotes } from "../composables/usePoolLotes.js";
-import { useRotationRunner, type ReadinessReason } from "../composables/useRotationRunner.js";
+import { useRotationRunner } from "../composables/useRotationRunner.js";
 import { usePromoritzSession } from "../composables/usePromoritzSession.js";
 import { useHistorial } from "../composables/useHistorial.js";
 import { getSupabaseConfigError } from "../composables/useSupabase.js";
@@ -166,16 +128,10 @@ const nuevoProducto = ref<(typeof PRODUCTOS_VALIDOS)[number]>("Mini Ritz");
 const actionError = ref<string | null>(null);
 const ultimosLogs = historial.logs;
 
-// Controles
 const cantidadAEnviar = ref(12);
 const usarDelayConfig = ref(false);
 
-const promoritzHoyClass = computed(() =>
-  session.promoritzLotesHoy.value >= 12 ? "text-red-600" : "text-green-600",
-);
-
 onMounted(() => {
-  session.fetchProfile();
   pool.loadBatchCounts();
 });
 
@@ -188,6 +144,7 @@ async function agregarLote() {
   } catch (e) {
     actionError.value = e instanceof Error ? e.message : String(e);
   }
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
 }
 
 function toggleActivo(id: string, activo: boolean) {
@@ -228,14 +185,5 @@ function badgeClass(r: string) {
   if (r === "success") return "bg-green-100 text-green-800 px-1.5 py-0.5 rounded";
   if (r === "failed") return "bg-red-100 text-red-800 px-1.5 py-0.5 rounded";
   return "bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded";
-}
-
-function readinessLabel(reason: ReadinessReason): string {
-  switch (reason) {
-    case "no-email": return "Falta configurar tu email de Promoritz";
-    case "placeholder-email": return "Email parece ser un placeholder";
-    case "no-pool": return "Pool vacío";
-    default: return "Listo para ejecutar";
-  }
 }
 </script>

@@ -5,6 +5,7 @@ import {
   ExecutionOrchestrator,
   SupabaseLogWriter,
 } from "../api/index.js";
+import type { CookieJar } from "../api/cookieJar.js";
 import {
   RotacionCiclicaRule,
   INJECTION_RESULT,
@@ -105,7 +106,10 @@ export function useRotationRunner() {
     }));
   }
 
-  async function execute(lotesActivos?: Lote[]) {
+  async function execute(
+    lotesActivos?: Lote[],
+    options?: { fastMode?: boolean; externalJar?: CookieJar },
+  ) {
     if (state.value.running) return;
 
     if (!readiness.value.ready) {
@@ -129,17 +133,27 @@ export function useRotationRunner() {
         throw new Error("Pool vacío. Agregá lotes antes de ejecutar.");
       }
 
+      const jarActual = options?.externalJar ?? jar;
+      const delayMinMs =
+        options?.fastMode
+          ? 100
+          : (config.value!.delayMinSegundos ?? 3) * 1000;
+      const delayMaxMs =
+        options?.fastMode
+          ? 500
+          : (config.value!.delayMaxSegundos ?? 7) * 1000;
+
       const injector = new HttpInjector({
         email: config.value!.email!,
-        cookieJar: jar,
+        cookieJar: jarActual,
       });
       const logWriter = new SupabaseLogWriter(sb);
       const orch = new ExecutionOrchestrator({
         rotationRule: new RotacionCiclicaRule(),
         injector,
         logWriter,
-        delayMinMs: (config.value!.delayMinSegundos ?? 3) * 1000,
-        delayMaxMs: (config.value!.delayMaxSegundos ?? 7) * 1000,
+        delayMinMs,
+        delayMaxMs,
         onProgress: (r, i) => {
           state.value.current = i + 1;
           state.value.total = Math.max(state.value.total, i + 1);

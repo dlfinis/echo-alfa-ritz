@@ -83,6 +83,16 @@ export function usePoolLotes() {
     await refresh();
   }
 
+  async function toggleActivo(id: string, activo: boolean) {
+    const estado = activo ? "activo" : "inactivo";
+    const { error: e } = await sb
+      .from("pool_lotes")
+      .update({ estado, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (e) throw e;
+    await refresh();
+  }
+
   async function removeLote(id: string) {
     const { error: e } = await sb.from("pool_lotes").delete().eq("id", id);
     if (e) throw e;
@@ -118,6 +128,7 @@ export function usePoolLotes() {
     refresh,
     addLote,
     toggleEstado,
+    toggleActivo,
     removeLote,
     editProducto,
     toDomain,

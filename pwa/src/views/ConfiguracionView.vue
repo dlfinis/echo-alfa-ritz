@@ -87,8 +87,10 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useConfiguracion } from "../composables/useConfiguracion.js";
+import { usePromoritzSession } from "../composables/usePromoritzSession.js";
 
 const cfg = useConfiguracion();
+const session = usePromoritzSession();
 
 const form = ref({
   email: "",
@@ -99,11 +101,13 @@ const form = ref({
   delayMaxSegundos: 7,
 });
 const savedAt = ref<string | null>(null);
+let emailAnterior = "";
 
 watch(
   () => cfg.config.value,
   (c) => {
     if (c) {
+      emailAnterior = c.email;
       form.value = {
         email: c.email,
         tareaActivada: c.tareaActivada,
@@ -122,6 +126,12 @@ async function save() {
     await cfg.update({ ...form.value });
     savedAt.value = new Date().toLocaleTimeString("es-EC");
     setTimeout(() => (savedAt.value = null), 2000);
+
+    // Si cambió el email, cerrar sesión activa
+    if (emailAnterior && form.value.email !== emailAnterior && session.isLoggedIn.value) {
+      session.logout();
+    }
+    emailAnterior = form.value.email;
   } catch (e) {
     console.error("Error guardando config:", e);
   }

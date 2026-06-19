@@ -1,6 +1,9 @@
 // ── Configuración del Sistema (PWA → Supabase) ──
-
-import type { Producto } from "./lote.js";
+//
+// NOTA: no hay `productoDefault` global — cada lote tiene su producto
+// propio (un mismo número de lote puede participar con varios productos
+// según el día, o solo uno fijo). El producto se elige al crear cada lote
+// en pool_lotes.
 
 export interface ConfiguracionSistema {
   id?: string;
@@ -10,7 +13,6 @@ export interface ConfiguracionSistema {
   fechaCaducidad: string; // "2026-12-31"
   delayMinSegundos: number; // 3
   delayMaxSegundos: number; // 7
-  productoDefault: Producto;
 }
 
 // ── Logs de Inscripción ──

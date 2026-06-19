@@ -45,7 +45,9 @@ export class HttpInjector implements IInjectionStrategy {
   constructor(config: HttpInjectorConfig) {
     this.baseUrl = config.baseUrl ?? BASE_URL;
     this.email = config.email;
-    this.fetchImpl = config.fetchImpl ?? fetch;
+    // IMPORTANTE: fetch debe mantener el this=globalThis; si se destructura
+    // y se invoca sin contexto, tira "Illegal invocation".
+    this.fetchImpl = (config.fetchImpl ?? fetch).bind(globalThis);
     this.jar = config.cookieJar;
   }
 

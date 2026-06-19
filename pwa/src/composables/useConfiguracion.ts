@@ -10,7 +10,6 @@ export interface ConfigRow {
   fecha_caducidad: string;
   delay_min_segundos: number;
   delay_max_segundos: number;
-  producto_default: string;
   updated_at: string;
 }
 
@@ -30,7 +29,6 @@ export function useConfiguracion() {
       fechaCaducidad: row.fecha_caducidad,
       delayMinSegundos: row.delay_min_segundos,
       delayMaxSegundos: row.delay_max_segundos,
-      productoDefault: row.producto_default as ConfiguracionSistema["productoDefault"],
     };
   }
 
@@ -59,7 +57,6 @@ export function useConfiguracion() {
     if (patch.fechaCaducidad !== undefined) update.fecha_caducidad = patch.fechaCaducidad;
     if (patch.delayMinSegundos !== undefined) update.delay_min_segundos = patch.delayMinSegundos;
     if (patch.delayMaxSegundos !== undefined) update.delay_max_segundos = patch.delayMaxSegundos;
-    if (patch.productoDefault !== undefined) update.producto_default = patch.productoDefault;
 
     const { error: e } = await sb
       .from("configuracion")

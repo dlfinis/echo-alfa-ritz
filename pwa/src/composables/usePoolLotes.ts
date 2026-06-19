@@ -1,6 +1,10 @@
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import type { Lote } from "@echo-alfa-ritz/shared";
-import { LOTE_ESTADO } from "@echo-alfa-ritz/shared";
+import {
+  LOTE_ESTADO,
+  esProductoValido,
+  esFormatoLoteValido,
+} from "@echo-alfa-ritz/shared";
 import { useSupabase } from "./useSupabase.js";
 
 export interface LoteRow {
@@ -85,6 +89,18 @@ export function usePoolLotes() {
     await refresh();
   }
 
+  async function editProducto(id: string, producto: string) {
+    if (!esProductoValido(producto)) {
+      throw new Error(`Producto inválido: "${producto}"`);
+    }
+    const { error: e } = await sb
+      .from("pool_lotes")
+      .update({ producto, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (e) throw e;
+    await refresh();
+  }
+
   function toDomain(row: LoteRow): Lote {
     return {
       id: row.id,
@@ -103,6 +119,7 @@ export function usePoolLotes() {
     addLote,
     toggleEstado,
     removeLote,
+    editProducto,
     toDomain,
   };
 }

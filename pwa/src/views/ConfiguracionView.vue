@@ -79,13 +79,6 @@
         </div>
       </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Producto por defecto</label>
-        <select v-model="form.productoDefault" class="w-full border rounded px-3 py-2" @change="save()">
-          <option v-for="p in productos" :key="p" :value="p">{{ p }}</option>
-        </select>
-      </div>
-
       <div v-if="savedAt" class="text-xs text-green-600">Guardado ✓</div>
     </div>
   </div>
@@ -94,10 +87,8 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useConfiguracion } from "../composables/useConfiguracion.js";
-import { PRODUCTOS_VALIDOS } from "@echo-alfa-ritz/shared";
 
 const cfg = useConfiguracion();
-const productos = PRODUCTOS_VALIDOS;
 
 const form = ref({
   email: "",
@@ -106,7 +97,6 @@ const form = ref({
   fechaCaducidad: "2026-12-31",
   delayMinSegundos: 3,
   delayMaxSegundos: 7,
-  productoDefault: "Mini Ritz" as (typeof PRODUCTOS_VALIDOS)[number],
 });
 const savedAt = ref<string | null>(null);
 
@@ -121,7 +111,6 @@ watch(
         fechaCaducidad: c.fechaCaducidad,
         delayMinSegundos: c.delayMinSegundos,
         delayMaxSegundos: c.delayMaxSegundos,
-        productoDefault: c.productoDefault,
       };
     }
   },

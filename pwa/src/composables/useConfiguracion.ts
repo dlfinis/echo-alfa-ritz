@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref } from "vue";
 import type { ConfiguracionSistema } from "@echo-alfa-ritz/shared";
 import { useSupabase } from "./useSupabase.js";
 
@@ -13,12 +13,20 @@ export interface ConfigRow {
   updated_at: string;
 }
 
+// ── Singleton: evitar múltiples subscripciones Realtime al mismo canal ──
+let _initialized = false;
+let _config = ref<ConfiguracionSistema | null>(null);
+let _loading = ref(true);
+let _error = ref<string | null>(null);
+
 export function useConfiguracion() {
   const sb = useSupabase();
-  const config = ref<ConfiguracionSistema | null>(null);
-  const loading = ref(true);
-  const error = ref<string | null>(null);
-  let channel: ReturnType<typeof sb.channel> | null = null;
+
+  if (!_initialized) {
+    _initialized = true;
+    refresh();
+    subscribe();
+  }
 
   function fromRow(row: ConfigRow): ConfiguracionSistema {
     return {
@@ -33,23 +41,23 @@ export function useConfiguracion() {
   }
 
   async function refresh() {
-    loading.value = true;
+    _loading.value = true;
     const { data, error: e } = await sb
       .from("configuracion")
       .select("*")
       .limit(1)
       .maybeSingle();
     if (e) {
-      error.value = e.message;
+      _error.value = e.message;
     } else if (data) {
-      config.value = fromRow(data as ConfigRow);
-      error.value = null;
+      _config.value = fromRow(data as ConfigRow);
+      _error.value = null;
     }
-    loading.value = false;
+    _loading.value = false;
   }
 
   async function update(patch: Partial<ConfiguracionSistema>) {
-    if (!config.value?.id) throw new Error("Sin id de configuración");
+    if (!_config.value?.id) throw new Error("Sin id de configuración");
     const update: Partial<ConfigRow> = { updated_at: new Date().toISOString() };
     if (patch.email !== undefined) update.email = patch.email;
     if (patch.tareaActivada !== undefined) update.tarea_activada = patch.tareaActivada;
@@ -61,13 +69,13 @@ export function useConfiguracion() {
     const { error: e } = await sb
       .from("configuracion")
       .update(update)
-      .eq("id", config.value.id);
+      .eq("id", _config.value.id);
     if (e) throw e;
     await refresh();
   }
 
   function subscribe() {
-    channel = sb
+    sb
       .channel("configuracion_changes")
       .on(
         "postgres_changes",
@@ -77,13 +85,5 @@ export function useConfiguracion() {
       .subscribe();
   }
 
-  onMounted(async () => {
-    await refresh();
-    subscribe();
-  });
-  onUnmounted(() => {
-    if (channel) sb.removeChannel(channel);
-  });
-
-  return { config, loading, error, refresh, update };
+  return { config: _config, loading: _loading, error: _error, refresh, update };
 }

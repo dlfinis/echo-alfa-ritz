@@ -12,14 +12,11 @@ export interface OrchestratorConfig {
   rotationRule: IRotationRule;
   injector: IInjectionStrategy;
   logWriter: LogWriter;
-  /**
-   * Delay aleatorio entre inyecciones (ms).
-   * Regla 4 del context: entre 3 y 7 segundos para mimetizar uso humano.
-   */
   delayMinMs?: number;
   delayMaxMs?: number;
+  /** Limita cuántos items enviar de la cola calculada (1-12). Por defecto todos. */
+  maxCount?: number;
   onProgress?: (resultado: InjectionResult, index: number) => void;
-  /** Se llama cuando el usuario cancela manualmente o se alcanza el límite. */
   onCancel?: () => void;
 }
 
@@ -29,6 +26,7 @@ export class ExecutionOrchestrator {
   private readonly logWriter: LogWriter;
   private readonly delayMinMs: number;
   private readonly delayMaxMs: number;
+  private readonly maxCount: number;
   private readonly onProgress?: (
     r: InjectionResult,
     i: number,
@@ -42,6 +40,7 @@ export class ExecutionOrchestrator {
     this.logWriter = config.logWriter;
     this.delayMinMs = config.delayMinMs ?? 3000;
     this.delayMaxMs = config.delayMaxMs ?? 7000;
+    this.maxCount = config.maxCount ?? 12;
     this.onProgress = config.onProgress;
     this.onCancel = config.onCancel;
   }
@@ -52,7 +51,7 @@ export class ExecutionOrchestrator {
 
   async executeDailyRotation(lotesActivos: Lote[]): Promise<InjectionResult[]> {
     this.cancelled = false;
-    const cola = this.rotationRule.calcularCola(lotesActivos);
+    const cola = this.rotationRule.calcularCola(lotesActivos).slice(0, this.maxCount);
     const resultados: InjectionResult[] = [];
     let limiteAlcanzado = false;
 

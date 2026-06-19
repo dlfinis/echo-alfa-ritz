@@ -114,7 +114,12 @@ export function useRotationRunner() {
 
   async function execute(
     lotesActivos?: Lote[],
-    options?: { fastMode?: boolean; externalJar?: CookieJar },
+    options?: {
+      fastMode?: boolean;
+      externalJar?: CookieJar;
+      /** Cuántos lotes enviar (1-12). 0 = todos. */
+      cantidad?: number;
+    },
   ) {
     if (state.value.running) return;
 
@@ -154,12 +159,14 @@ export function useRotationRunner() {
         cookieJar: jarActual,
       });
       const logWriter = new SupabaseLogWriter(sb);
+      const maxCount = Math.min(Math.max(options?.cantidad ?? 12, 1), 12);
       _orchestrator = new ExecutionOrchestrator({
         rotationRule: new RotacionCiclicaRule(),
         injector,
         logWriter,
         delayMinMs,
         delayMaxMs,
+        maxCount,
         onCancel: () => {
           state.value.skipped = state.value.total - state.value.current;
         },

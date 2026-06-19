@@ -111,6 +111,27 @@ export function usePoolLotes() {
     await refresh();
   }
 
+  // ── Contador de veces enviado por lote ──
+  const batchCount = ref<Record<string, number>>({});
+
+  async function loadBatchCounts() {
+    // SELECT numero, COUNT(*) FROM logs_inscripcion
+    //   WHERE resultado='success' GROUP BY numero
+    const { data, error: e } = await sb
+      .from("logs_inscripcion")
+      .select("numero, resultado")
+      .eq("resultado", "success");
+    if (e) {
+      console.warn("Error cargando batchCount:", e.message);
+      return;
+    }
+    const map: Record<string, number> = {};
+    for (const row of data ?? []) {
+      map[row.numero] = (map[row.numero] ?? 0) + 1;
+    }
+    batchCount.value = map;
+  }
+
   function toDomain(row: LoteRow): Lote {
     return {
       id: row.id,
@@ -132,5 +153,7 @@ export function usePoolLotes() {
     removeLote,
     editProducto,
     toDomain,
+    batchCount,
+    loadBatchCounts,
   };
 }

@@ -9,7 +9,7 @@
     "test": "pnpm --filter @echo-alfa-ritz/shared test && pnpm --filter @echo-alfa-ritz/pwa test",
     "typecheck": "pnpm -r typecheck",
     "verify-schema": "pnpm --filter @echo-alfa-ritz/pwa exec tsx scripts/verify-schema.ts",
-    "deploy": "pnpm build && pnpm --filter @echo-alfa-ritz/pwa exec wrangler pages deploy dist --project-name=echo-alfa-ritz --branch=main --commit-dirty=true"
+    "deploy": "pnpm build && pnpm --filter @echo-alfa-ritz/pwa exec wrangler pages deploy dist --project-name=echo-alfa-ritz --branch=main"
   },
   "devDependencies": {
     "tsx": "^4.19.0",

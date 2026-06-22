@@ -1,14 +1,24 @@
-# wrangler.toml — configuración de deploy a Cloudflare Pages
+# wrangler.toml — Cloudflare Pages deploy
 #
-# Este archivo NO es leído por Vite. Es para `wrangler pages deploy`.
-# Documentación: https://developers.cloudflare.com/pages/functions/wrangler-configuration/
+# Uso manual (desde pwa/):
+#   pnpm exec wrangler pages deploy dist
+#
+# Uso automático (GitHub → Cloudflare Pages):
+#   Conectar repo en https://dash.cloudflare.com → Workers & Pages → Create
+#   Build command: pnpm build
+#   Build output dir: pwa/dist
+#   Root dir: (dejar vacío)
 
 name = "echo-alfa-ritz"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "./dist"
 
-# El secret con la service role key de Supabase iría acá si en algún
-# momento el Worker necesita escribir directamente (e.g. logging server-side).
-# NO commitear secrets. Usar `wrangler secret put SUPABASE_SERVICE_ROLE`.
-# [[vars]]
-# SUPABASE_URL = "https://cxonjoojvkmpxkessasp.supabase.co"
+# Variables de entorno para Vite (INYECTADAS en build time).
+# En Cloudflare Pages se configuran desde el dashboard:
+#   Settings → Environment variables → Production
+#   VITE_SUPABASE_URL = https://cxonjoojvkmpxkessasp.supabase.co
+#   VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
+# NO poner valores reales aquí — se commitean.
+[vars]
+VITE_SUPABASE_URL = ""
+VITE_SUPABASE_PUBLISHABLE_KEY = ""

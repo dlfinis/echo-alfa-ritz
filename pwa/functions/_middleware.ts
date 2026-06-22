@@ -63,23 +63,49 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     );
   }
 
-  // Devolver la respuesta del upstream, agregando CORS headers
-  // para que el browser la acepte.
+  // Construir headers para el response al browser.
   //
-  // IMPORTANTE: NO crear `new Headers(upstream.headers)` porque en la Fetch
-  // API de los Cloudflare Workers eso descarta los `Set-Cookie` (son
-  // "forbidden response-header names" según spec, solo accesibles vía
-  // getSetCookie() en el response original). Modificamos los headers
-  // existentes IN-PLACE para preservar las cookies.
-  const cors = corsHeaders();
-  for (const [k, v] of Object.entries(cors)) {
-    upstream.headers.set(k, v);
+  // El upstream.headers (Headers del fetch response) es INMUTABLE en
+  // Cloudflare Workers. No podemos hacer upstream.headers.set() — tira
+  // TypeError. Tampoco podemos copiarlos directo con new Headers() porque
+  // descartarían los Set-Cookie (son "forbidden response-header names"
+  // en la spec de la Fetch API, solo accesibles vía getSetCookie()).
+  //
+  // Approach:
+  // 1. Leer las cookies con getSetCookie() en el original
+  // 2. Crear un nuevo Headers NUESTRO (mutable)
+  // 3. Copiar todos los headers del upstream EXCEPTO set-cookie
+  // 4. Poner las cookies en un header custom 'x-set-cookie' (accesible
+  //    al JS, mismo approach que Vite dev proxy)
+  // 5. Agregar los CORS headers al nuestro
+  //
+  // El browser nunca ve los Set-Cookie reales (cross-origin), pero
+  // InMemoryCookieJar tiene fallback que lee x-set-cookie.
+
+  const setCookies = upstream.headers.getSetCookie();
+  const headers = new Headers();
+
+  // Copiar todos los headers del upstream (excepto set-cookie)
+  for (const [k, v] of upstream.headers.entries()) {
+    if (k.toLowerCase() !== "set-cookie") {
+      headers.set(k, v);
+    }
+  }
+
+  // Exponer las cookies vía header custom (mismo approach que Vite dev)
+  if (setCookies.length > 0) {
+    headers.set("x-set-cookie", encodeURIComponent(setCookies.join("||")));
+  }
+
+  // CORS headers
+  for (const [k, v] of Object.entries(corsHeaders())) {
+    headers.set(k, v);
   }
 
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: upstream.headers,
+    headers,
   });
 };
 

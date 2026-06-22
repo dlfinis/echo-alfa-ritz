@@ -65,16 +65,21 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
   // Devolver la respuesta del upstream, agregando CORS headers
   // para que el browser la acepte.
-  const headers = new Headers(upstream.headers);
+  //
+  // IMPORTANTE: NO crear `new Headers(upstream.headers)` porque en la Fetch
+  // API de los Cloudflare Workers eso descarta los `Set-Cookie` (son
+  // "forbidden response-header names" según spec, solo accesibles vía
+  // getSetCookie() en el response original). Modificamos los headers
+  // existentes IN-PLACE para preservar las cookies.
   const cors = corsHeaders();
   for (const [k, v] of Object.entries(cors)) {
-    headers.set(k, v);
+    upstream.headers.set(k, v);
   }
 
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers,
+    headers: upstream.headers,
   });
 };
 

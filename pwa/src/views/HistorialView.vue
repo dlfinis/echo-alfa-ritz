@@ -1,31 +1,35 @@
 <template>
   <div>
-    <h2 class="text-2xl font-semibold mb-4">Historial de Cargas</h2>
+    <h2 class="text-2xl font-semibold mb-4 flex items-center gap-2">
+      <span>📋</span> Historial de Cargas
+    </h2>
 
     <div v-if="historial.loading.value" class="text-gray-400">Cargando…</div>
     <div v-else-if="historial.logs.value.length === 0" class="text-gray-400">
       Sin ejecuciones registradas todavía.
     </div>
-    <table v-else class="w-full bg-white rounded-lg shadow text-sm">
-      <thead class="text-left text-gray-500 border-b">
-        <tr>
-          <th class="py-2 px-3">Fecha</th>
-          <th>Lote</th>
-          <th>Resultado</th>
-          <th>Mensaje</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="log in historial.logs.value" :key="log.id" class="border-b">
-          <td class="py-2 px-3 font-mono text-xs">{{ formatFecha(log.fecha) }}</td>
-          <td class="font-mono">{{ log.numero }}</td>
-          <td>
-            <span :class="badgeClass(log.resultado)">{{ log.resultado }}</span>
-          </td>
-          <td class="text-gray-600 text-xs">{{ log.mensaje }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div v-else class="bg-white rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-sm min-w-[480px]">
+        <thead class="text-left text-gray-500 border-b">
+          <tr>
+            <th class="py-2 px-3">Fecha</th>
+            <th>Lote</th>
+            <th>Resultado</th>
+            <th>Mensaje</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="log in historial.logs.value" :key="log.id" class="border-b last:border-0">
+            <td class="py-2 px-3 font-mono text-xs whitespace-nowrap">{{ formatFecha(log.fecha) }}</td>
+            <td class="font-mono whitespace-nowrap">{{ log.numero }}</td>
+            <td>
+              <span :class="badgeClass(log.resultado)">{{ log.resultado }}</span>
+            </td>
+            <td class="text-gray-600 text-xs">{{ log.mensaje }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 

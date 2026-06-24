@@ -4,13 +4,14 @@
 // propio (un mismo número de lote puede participar con varios productos
 // según el día, o solo uno fijo). El producto se elige al crear cada lote
 // en pool_lotes.
+//
+// NOTA: No hay campos de "tarea automática" — al ser una PWA estática en
+// Cloudflare Pages, no hay cron del lado del server. La rotación la
+// dispara el usuario desde el botón "Hornear Galletas".
 
 export interface ConfiguracionSistema {
   id?: string;
   email: string; // login del usuario en promoritz
-  tareaActivada: boolean;
-  horaEjecucion: string; // "00:00"
-  fechaCaducidad: string; // "2026-12-31"
   delayMinSegundos: number; // 3
   delayMaxSegundos: number; // 7
 }

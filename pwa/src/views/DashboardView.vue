@@ -1,6 +1,8 @@
 <template>
   <div>
-    <h2 class="text-2xl font-semibold mb-4">Dashboard de Lotes</h2>
+    <h2 class="text-2xl font-semibold mb-4 flex items-center gap-2">
+      <span>🍪</span> Dashboard de Lotes
+    </h2>
 
     <!-- Supabase error -->
     <div v-if="configError" class="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4">
@@ -103,9 +105,10 @@
           <input id="useDelay" type="checkbox" v-model="usarDelayConfig" class="w-4 h-4 accent-primary" />
           <label for="useDelay" class="text-sm text-gray-600 select-none">Delay configurado</label>
         </div>
-        <div class="text-xs pb-1">
+        <div class="text-xs pb-1 flex items-center gap-1">
+          <span class="text-base">🍪</span>
           <span :class="pool.hoyCount.value >= 12 ? 'text-red-600 font-bold' : ''">
-            Enviados hoy: {{ pool.hoyCount.value }} / 12
+            Enviadas hoy: {{ pool.hoyCount.value }} / 12
             <span v-if="pool.hoyCount.value >= 12" class="text-red-600"> — ¡Cupo lleno!</span>
             <span v-else class="text-gray-500"> — faltan {{ 12 - pool.hoyCount.value }}</span>
           </span>
@@ -116,8 +119,8 @@
     <!-- Pool de Lotes -->
     <div class="bg-white rounded-lg shadow p-4 mb-6">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="text-lg font-semibold">Pool de Lotes ({{ pool.lotes.value.length }})</h3>
-        <span class="text-xs text-gray-500">{{ pool.lotesActivos.value.length }} activos</span>
+        <h3 class="text-lg font-semibold">Tarro de Galletas ({{ pool.lotes.value.length }})</h3>
+        <span class="text-xs text-gray-500">{{ pool.lotesActivos.value.length }} activas</span>
       </div>
 
       <!-- Batch actions -->
@@ -130,36 +133,50 @@
       </div>
 
       <div v-if="pool.loading.value" class="text-gray-400">Cargando…</div>
-      <div v-else-if="pool.lotes.value.length === 0" class="text-gray-400">Pool vacío.</div>
-      <table v-else class="w-full text-sm">
-        <thead class="text-left text-gray-500">
-          <tr>
-            <th class="py-2 w-8"><input type="checkbox" :checked="todosSeleccionados" class="w-4 h-4 accent-blue-600 cursor-pointer" @change="toggleSelectAll" /></th>
-            <th class="py-2 w-8"></th>
-            <th class="py-2">Número</th>
-            <th>Producto</th>
-            <th class="text-center">Veces</th>
-            <th class="text-right">Acción</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="l in pool.lotes.value" :key="l.id" class="border-t">
-            <td class="py-2">
-              <input type="checkbox" :checked="selectedIds.has(l.id)" class="w-4 h-4 accent-blue-600 cursor-pointer" @change="toggleSelection(l.id)" />
-            </td>
-            <td class="py-2">
-              <input type="checkbox" :checked="l.estado === 'activo'" class="w-4 h-4 accent-primary cursor-pointer" @change="(e) => toggleActivo(l.id, (e.target as HTMLInputElement).checked)" />
-            </td>
-            <td class="font-mono">{{ l.numero }}</td>
-            <td>{{ l.producto }}</td>
-            <td class="text-center font-mono text-xs">{{ pool.batchCount.value[l.numero] ?? 0 }}</td>
-            <td class="text-right whitespace-nowrap">
-              <button class="text-xs text-blue-600 hover:underline mr-2" @click="startEdit(l)">Editar</button>
-              <button class="text-xs text-red-600 hover:underline" @click="borrarLote(l.id, l.numero)">Borrar</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else-if="pool.lotes.value.length === 0" class="text-center py-8">
+        <div class="text-5xl mb-2 opacity-50">🍪</div>
+        <p class="text-gray-500 text-sm">Tu tarro de galletas está vacío</p>
+        <p class="text-gray-400 text-xs mt-1">Agregá lotes arriba para empezar a hornear</p>
+      </div>
+      <div v-else class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[480px]">
+          <colgroup>
+            <col class="w-8" />
+            <col class="w-8" />
+            <col />
+            <col />
+            <col class="hidden md:table-column w-16" />
+            <col class="w-24" />
+          </colgroup>
+          <thead class="text-left text-gray-500">
+            <tr>
+              <th class="py-2"><input type="checkbox" :checked="todosSeleccionados" class="w-4 h-4 accent-blue-600 cursor-pointer" @change="toggleSelectAll" /></th>
+              <th class="py-2"></th>
+              <th class="py-2">Número</th>
+              <th>Producto</th>
+              <th class="text-center hidden md:table-cell">Veces</th>
+              <th class="text-right">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="l in pool.lotes.value" :key="l.id" class="border-t">
+              <td class="py-2">
+                <input type="checkbox" :checked="selectedIds.has(l.id)" class="w-4 h-4 accent-blue-600 cursor-pointer" @change="toggleSelection(l.id)" />
+              </td>
+              <td class="py-2">
+                <input type="checkbox" :checked="l.estado === 'activo'" class="w-4 h-4 accent-primary cursor-pointer" @change="(e) => toggleActivo(l.id, (e.target as HTMLInputElement).checked)" />
+              </td>
+              <td class="font-mono whitespace-nowrap">{{ l.numero }}</td>
+              <td>{{ l.producto }}</td>
+              <td class="text-center font-mono text-xs hidden md:table-cell">{{ pool.batchCount.value[l.numero] ?? 0 }}</td>
+              <td class="text-right whitespace-nowrap">
+                <button class="text-xs text-blue-600 hover:underline mr-2" @click="startEdit(l)">Editar</button>
+                <button class="text-xs text-red-600 hover:underline" @click="borrarLote(l.id, l.numero)">Borrar</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Última ejecución -->
@@ -178,11 +195,12 @@
     <!-- Botón ejecutar -->
     <div class="flex flex-col items-center gap-2">
       <button
-        class="bg-primary text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-primary/90 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+        class="bg-primary text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-primary/90 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         :disabled="runner.state.value.running || pool.lotesActivos.value.length === 0"
         @click="openConfirm"
       >
-        {{ runner.state.value.running ? "Ejecutando…" : "Ejecutar Carga Ahora" }}
+        <span class="text-2xl">🍪</span>
+        {{ runner.state.value.running ? "Horneando…" : "Hornear Galletas" }}
       </button>
       <p v-if="pool.lotesActivos.value.length === 0" class="text-xs text-gray-500">Sin lotes activos</p>
     </div>
@@ -252,11 +270,11 @@ async function ejecutarConfirmado() {
 
   const s = runner.state.value;
   if (s.failed > 0 && s.success === 0) {
-    showToast(`Rotación fallida: ${s.failed} errores`, "error");
+    showToast(`😢 ${s.failed} galletas se quemaron`, "error");
   } else if (s.failed > 0) {
-    showToast(`Rotación completada: ${s.success} success, ${s.failed} failed, ${s.skipped} skipped`, "partial");
+    showToast(`🍪 ¡${s.success} horneadas! (${s.failed} fallaron, ${s.skipped} saltadas)`, "partial");
   } else {
-    showToast(`Rotación completada: ${s.success} success, ${s.skipped} skipped`, "success");
+    showToast(`🍪 ¡${s.success} galletas horneadas!${s.skipped > 0 ? ` (${s.skipped} saltadas)` : ""}`, "success");
   }
 }
 

@@ -24,36 +24,6 @@
         </p>
       </div>
 
-      <div class="flex items-center justify-between">
-        <span class="text-sm font-medium text-gray-700">Tarea Automática</span>
-        <label class="inline-flex items-center cursor-pointer">
-          <input type="checkbox" v-model="form.tareaActivada" class="sr-only peer" @change="save()" />
-          <span class="w-11 h-6 bg-gray-200 peer-checked:bg-primary rounded-full relative transition">
-            <span class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></span>
-          </span>
-        </label>
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Hora de Ejecución</label>
-        <input
-          v-model="form.horaEjecucion"
-          type="time"
-          class="border rounded px-3 py-2"
-          @blur="save()"
-        />
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Fecha de Caducidad</label>
-        <input
-          v-model="form.fechaCaducidad"
-          type="date"
-          class="border rounded px-3 py-2"
-          @blur="save()"
-        />
-      </div>
-
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Delay mín (s)</label>
@@ -79,6 +49,11 @@
         </div>
       </div>
 
+      <p class="text-xs text-gray-500 pt-2 border-t">
+        🍪 La rotación se dispara manualmente desde el botón "Hornear Galletas" del Dashboard.
+        No hay cron automático (Cloudflare Pages no soporta tareas programadas del lado del server).
+      </p>
+
       <div v-if="savedAt" class="text-xs text-green-600">Guardado ✓</div>
     </div>
   </div>
@@ -94,9 +69,6 @@ const session = usePromoritzSession();
 
 const form = ref({
   email: "",
-  tareaActivada: false,
-  horaEjecucion: "00:00",
-  fechaCaducidad: "2026-12-31",
   delayMinSegundos: 3,
   delayMaxSegundos: 7,
 });
@@ -110,9 +82,6 @@ watch(
       emailAnterior = c.email;
       form.value = {
         email: c.email,
-        tareaActivada: c.tareaActivada,
-        horaEjecucion: c.horaEjecucion,
-        fechaCaducidad: c.fechaCaducidad,
         delayMinSegundos: c.delayMinSegundos,
         delayMaxSegundos: c.delayMaxSegundos,
       };
@@ -127,7 +96,6 @@ async function save() {
     savedAt.value = new Date().toLocaleTimeString("es-EC");
     setTimeout(() => (savedAt.value = null), 2000);
 
-    // Si cambió el email, cerrar sesión activa
     if (emailAnterior && form.value.email !== emailAnterior && session.isLoggedIn.value) {
       session.logout();
     }

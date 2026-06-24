@@ -247,6 +247,69 @@ describe("HttpInjector", () => {
     expect(resultado.mensaje).toContain("Producto inválido");
     expect(calls).toHaveLength(0);
   });
+
+  it("hace auto-relogin y reintenta cuando el server responde 401 (sesión expirada)", async () => {
+    // Plan: 1) login OK → 2) inyectar 401 (sesión expirada, mapeado por el
+    // Worker desde 307 de promoritz) → 3) re-login → 4) inyectar 200 OK
+    const { fetch: mockFetch, calls } = crearFetchMock([
+      { status: 200, setCookies: ["token=viejoperoinvalido"] }, // 1) login
+      { status: 401, body: { error: "session_expired" } },     // 2) inyectar
+      { status: 200, setCookies: ["token=fresca"] },            // 3) re-login
+      {                                                      // 4) inyectar retry
+        status: 200,
+        body: {
+          brand: "Ritz",
+          product: "Mini Ritz",
+          lote: "AB123456789",
+          username: "Alfa Beta",
+          userId: "uuid",
+          whatsapp: true,
+          isReemplazo: false,
+          referredBy: null,
+          id: "lote-post-relogin",
+          createdAt: new Date().toISOString(),
+        } satisfies LoteEnviado,
+      },
+    ]);
+
+    const injector = new HttpInjector({
+      email: "test@example.com",
+      fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
+    });
+
+    const resultado = await injector.inyectar(loteBase);
+
+    expect(calls).toHaveLength(4);
+    expect(calls[0].url).toMatch(/\/api\/users\/login$/);
+    expect(calls[1].url).toMatch(/\/api\/lotes$/);          // primer inyectar (401)
+    expect(calls[2].url).toMatch(/\/api\/users\/login$/);  // re-login
+    expect(calls[3].url).toMatch(/\/api\/lotes$/);          // inyectar retry (200)
+    // El segundo inyectar va con la cookie fresca
+    const headersRetry = new Headers(calls[3].init.headers);
+    expect(headersRetry.get("cookie")).toBe("token=fresca");
+    expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
+    expect(resultado.mensaje).toContain("lote-post-relogin");
+  });
+
+  it("marca FAILED si el re-login no logra renovar la sesión", async () => {
+    const { fetch: mockFetch, calls } = crearFetchMock([
+      { status: 200, setCookies: ["token=viejo"] },
+      { status: 401, body: { error: "session_expired" } },
+      { status: 500, body: { error: "down" } }, // re-login falla
+    ]);
+
+    const injector = new HttpInjector({
+      email: "test@example.com",
+      fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
+    });
+
+    const resultado = await injector.inyectar(loteBase);
+    expect(calls).toHaveLength(3);
+    expect(resultado.status).toBe(INJECTION_RESULT.FAILED);
+    expect(resultado.mensaje).toContain("relogin falló");
+  });
 });
 
 // ── ProfileReader ──

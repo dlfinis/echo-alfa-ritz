@@ -36,15 +36,28 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const upstreamPath = url.pathname.replace(/^\/api\/promoritz/, "/ec");
   const upstreamUrl = `https://promoritz.com${upstreamPath}${url.search}`;
 
-  // Reenviar el request. Importante: NO usar `request.body` directamente
-  // porque puede ser un ReadableStream que se consume una sola vez.
+  // Reenviar el request. CRÍTICO: bufferear el body como ArrayBuffer.
+  //
+  // request.body es un ReadableStream (one-time-use). Si promoritz responde
+  // 3xx (e.g. 307 → /login cuando la sesión expiró), el runtime de Workers
+  // intenta seguir el redirect re-enviando el body, pero un stream no se
+  // puede replay → throws "upstream_unreachable". Buffereando como
+  // ArrayBuffer, Workers puede replay el body en el redirect.
+  let body: ArrayBuffer | undefined;
+  if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
+    body = await request.arrayBuffer();
+  }
+
   const init: RequestInit = {
     method: request.method,
     headers: buildUpstreamHeaders(request.headers),
+    body,
+    // No seguir redirects: si promoritz hace 307 (sesión expirada) queremos
+    // propagarlo al PWA para que dispare relogin. Si siguiéramos el redirect
+    // a /login, el browser recibiría HTML de la página de login y fallaría
+    // el parseo JSON del response.
+    redirect: "manual",
   };
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = request.body;
-  }
 
   let upstream: Response;
   try {
@@ -58,6 +71,23 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }),
       {
         status: 502,
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      },
+    );
+  }
+
+  // Si promoritz responde 3xx (típicamente 307 → /login cuando la sesión
+  // expiró), el PWA no debe seguir el redirect (cross-origin y semánticamente
+  // incorrecto). Mapeamos a 401 con un JSON explicativo para que el cliente
+  // dispare auto-relogin.
+  if (upstream.status >= 300 && upstream.status < 400) {
+    return new Response(
+      JSON.stringify({
+        error: "session_expired",
+        message: `Promoritz redirect (${upstream.status})`,
+      }),
+      {
+        status: 401,
         headers: { "Content-Type": "application/json", ...corsHeaders() },
       },
     );

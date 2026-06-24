@@ -97,15 +97,17 @@ export class HttpInjector implements IInjectionStrategy {
       if (!logged) return this.fail(lote, "Sin sesión activa y login falló");
     }
 
-    const res = await this.fetchImpl(`${this.baseUrl}/api/lotes`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: this.jar.toCookieHeader(),
-      },
-      credentials: "include",
-      body: JSON.stringify({ lote: lote.numero, product: lote.producto }),
-    });
+    let res = await this.postLote(lote);
+
+    // Auto-relogin: el Worker mapea 307 de promoritz → 401 aquí (cuerpo
+    // JSON con `error: "session_expired"`). Si vemos 401 o un 3xx que se
+    // coló, asumimos sesión expirada y reintentamos UNA vez con cookie
+    // fresca.
+    if (res.status === 401 || (res.status >= 300 && res.status < 400)) {
+      const reLogged = await this.login();
+      if (!reLogged) return this.fail(lote, `Sesión expirada (HTTP ${res.status}) y relogin falló`);
+      res = await this.postLote(lote);
+    }
 
     this.jar.setFromResponse(res.headers);
 
@@ -134,6 +136,18 @@ export class HttpInjector implements IInjectionStrategy {
     }
 
     return this.fail(lote, `HTTP ${res.status}`);
+  }
+
+  private async postLote(lote: Lote): Promise<Response> {
+    return this.fetchImpl(`${this.baseUrl}/api/lotes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: this.jar.toCookieHeader(),
+      },
+      credentials: "include",
+      body: JSON.stringify({ lote: lote.numero, product: lote.producto }),
+    });
   }
 
   async validarSesion(): Promise<boolean> {

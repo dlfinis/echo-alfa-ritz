@@ -58,4 +58,4 @@ website/
 .cgcignore
 
 # Supabase CLI temp files (auto-generated on `supabase link`)
-supabase/.temp/
+supabase/.temp/pwa/.wrangler/

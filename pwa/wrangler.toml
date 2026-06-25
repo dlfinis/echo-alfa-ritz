@@ -9,9 +9,10 @@
 #   Build output dir: pwa/dist
 #   Root dir: (dejar vacío)
 
+#:schema node_modules/wrangler/config-schema.json
 name = "echo-alfa-ritz"
-compatibility_date = "2024-09-23"
-pages_build_output_dir = "./dist"
+#compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
 
 # Variables de entorno para Vite (INYECTADAS en build time).
 # En Cloudflare Pages se configuran desde el dashboard:

@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:wrangler": "wrangler pages dev dist",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "deploy": "pnpm build && wrangler pages deploy dist --project-name=echo-alfa-ritz --branch=main"
   },
   "dependencies": {
     "@echo-alfa-ritz/shared": "workspace:*",

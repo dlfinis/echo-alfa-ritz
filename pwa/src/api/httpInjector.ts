@@ -72,7 +72,39 @@ export class HttpInjector implements IInjectionStrategy {
     });
 
     if (res.status >= 200 && res.status < 300) {
+      // Camino 1: leer cookies del response (vía x-set-cookie custom header
+      // del Worker — depende de Access-Control-Expose-Headers).
       this.jar.setFromResponse(res.headers);
+
+      // Camino 2 (fallback robusto): si por algún motivo las cookies no
+      // llegaron vía headers, parsear el token directamente del body JSON.
+      // El endpoint de promoritz devuelve {id, email, ..., token: "eyJ..."}
+      // y podemos inyectar `token` + `user` sintéticos en el jar.
+      if (!this.jar.hasSession()) {
+        try {
+          const body = (await res.clone().json()) as {
+            token?: string;
+            id?: string;
+            email?: string;
+            name?: string;
+            lastname?: string;
+          };
+          if (body.token) {
+            this.jar.cookies["token"] = body.token;
+            this.jar.cookies["user"] = encodeURIComponent(
+              JSON.stringify({
+                id: body.id,
+                name: body.name,
+                lastname: body.lastname,
+                email: body.email,
+              }),
+            );
+          }
+        } catch {
+          // body no era JSON, ignorar
+        }
+      }
+
       return this.jar.hasSession();
     }
     return false;

@@ -310,6 +310,52 @@ describe("HttpInjector", () => {
     expect(resultado.status).toBe(INJECTION_RESULT.FAILED);
     expect(resultado.mensaje).toContain("relogin falló");
   });
+
+  it("fallback: parsea token del body JSON si los headers no traen cookies", async () => {
+    // Simula un browser que NO expone x-set-cookie (CORS sin
+    // Access-Control-Expose-Headers). El response no tiene set-cookie ni
+    // x-set-cookie, solo el body con { token, id, ... }.
+    const mockFetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/api/users/login")) {
+        return new Response(
+          JSON.stringify({
+            id: "user-uuid",
+            name: "Alfa",
+            lastname: "Beta",
+            email: "test@example.com",
+            token: "jwt-from-body",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // /api/lotes — debería recibir el token del body via Cookie header
+      return new Response(
+        JSON.stringify({
+          brand: "Ritz",
+          product: "Mini Ritz",
+          lote: "AB123456789",
+          username: "Alfa Beta",
+          userId: "uuid",
+          whatsapp: true,
+          isReemplazo: false,
+          referredBy: null,
+          id: "x",
+          createdAt: new Date().toISOString(),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const injector = new HttpInjector({
+      email: "test@example.com",
+      fetchImpl: mockFetch,
+      cookieJar: new InMemoryCookieJar(),
+    });
+
+    const resultado = await injector.inyectar(loteBase);
+    expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
+  });
 });
 
 // ── ProfileReader ──

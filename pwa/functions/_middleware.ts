@@ -146,6 +146,11 @@ function corsHeaders(): Record<string, string> {
     "Access-Control-Allow-Headers": "content-type, cookie, x-requested-with",
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
+    // CRÍTICO: sin este header, el browser ESCONDE x-set-cookie a JavaScript
+    // (CORS solo expone "simple response headers" + los listados aquí). El
+    // InMemoryCookieJar del PWA no podría leer las cookies y promoritz
+    // rechazaría cada request como sesión expirada.
+    "Access-Control-Expose-Headers": "x-set-cookie",
   };
 }
 

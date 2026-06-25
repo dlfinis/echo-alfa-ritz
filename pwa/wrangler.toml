@@ -13,13 +13,13 @@
 name = "echo-alfa-ritz"
 pages_build_output_dir = "dist"
 
-# Variables de entorno de Vite (build-time, bakeadas al bundle).
-# Estas son la `anon key` / `publishable key` de Supabase — PUBLICAS por
-# diseño. El browser las lee directo desde `import.meta.env.VITE_*` para
-# hablar con Supabase. NO usar `wrangler pages secret put` para estas.
+# Las Supabase vars (VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY) son
+# build-time vars de Vite. Se configuran en el dashboard de Cloudflare Pages
+# (NO commiteadas acá, NO en `wrangler pages secret put`):
+#   Cloudflare → Workers & Pages → echo-alfa-ritz → Settings → Environment
+#   variables → Production → agregar:
+#     VITE_SUPABASE_URL = https://cxonjoojvkmpxkessasp.supabase.co
+#     VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
 #
-# Para secrets reales (SERVICE_ROLE_KEY, API keys privadas) usá
-# `wrangler pages secret put` y accedelas en el Worker via context.env.
-[vars]
-VITE_SUPABASE_URL = "https://cxonjoojvkmpxkessasp.supabase.co"
-VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_D1DUr1qjk4wB0dXiKxd4xw_thvSz1qv"
+# Para secrets REALES del Worker (SERVICE_ROLE_KEY, etc.) usá
+# `wrangler pages secret put` y accedelas via context.env.

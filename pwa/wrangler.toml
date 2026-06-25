@@ -11,15 +11,15 @@
 
 #:schema node_modules/wrangler/config-schema.json
 name = "echo-alfa-ritz"
-#compatibility_date = "2024-09-23"
 pages_build_output_dir = "dist"
 
-# Variables de entorno para Vite (INYECTADAS en build time).
-# En Cloudflare Pages se configuran desde el dashboard:
-#   Settings → Environment variables → Production
-#   VITE_SUPABASE_URL = https://cxonjoojvkmpxkessasp.supabase.co
-#   VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
-# NO poner valores reales aquí — se commitean.
+# Variables de entorno de Vite (build-time, bakeadas al bundle).
+# Estas son la `anon key` / `publishable key` de Supabase — PUBLICAS por
+# diseño. El browser las lee directo desde `import.meta.env.VITE_*` para
+# hablar con Supabase. NO usar `wrangler pages secret put` para estas.
+#
+# Para secrets reales (SERVICE_ROLE_KEY, API keys privadas) usá
+# `wrangler pages secret put` y accedelas en el Worker via context.env.
 [vars]
-VITE_SUPABASE_URL = ""
-VITE_SUPABASE_PUBLISHABLE_KEY = ""
+VITE_SUPABASE_URL = "https://cxonjoojvkmpxkessasp.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_D1DUr1qjk4wB0dXiKxd4xw_thvSz1qv"

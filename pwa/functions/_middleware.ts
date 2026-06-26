@@ -102,12 +102,30 @@ function corsHeaders(): Record<string, string> {
 }
 
 function buildUpstreamHeaders(original: Headers): Headers {
-  // Pasar todo lo del browser. NO filtramos cf-* porque puede romper
-  // headers legítimos. promoritz solo lee Cookie.
-  const headers = new Headers(original);
-  // Solo sacamos lo que no tiene sentido server-to-server.
-  headers.delete("host");
-  headers.delete("origin");
-  headers.delete("referer");
+  // Filtrar el Cookie header para NO mandar las cookies de Cloudflare
+  // Access (CF_AppSession, CF_Authorization) a promoritz. promoritz
+  // ve dos JWT y se confunde, devolviendo 307 (session expired) porque
+  // no sabe cuál validar.
+  const headers = new Headers();
+  for (const [k, v] of original.entries()) {
+    const lower = k.toLowerCase();
+    if (lower === "host" || lower === "origin" || lower === "referer") {
+      continue;
+    }
+    if (lower === "cookie") {
+      // Solo pasar token + user (las cookies de promoritz).
+      const filtered = (v as string)
+        .split(";")
+        .map((c) => c.trim())
+        .filter((c) => {
+          const name = c.split("=", 1)[0]?.trim().toLowerCase();
+          return name === "token" || name === "user";
+        })
+        .join("; ");
+      if (filtered) headers.set("Cookie", filtered);
+      continue;
+    }
+    headers.set(k, v);
+  }
   return headers;
 }

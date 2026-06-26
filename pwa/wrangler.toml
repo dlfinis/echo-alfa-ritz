@@ -4,7 +4,7 @@
 # dashboard de Cloudflare Pages, NO acá.
 #   Cloudflare → Workers & Pages → echo-alfa-ritz → Settings →
 #   Environment variables → Production:
-#     VITE_SUPABASE_URL = https://cxonjoojvkmpxkessasp.supabase.co
+#     VITE_SUPABASE_URL =
 #     VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
 #
 # Para local dev: usar pwa/.env.local (gitignored).
@@ -13,3 +13,8 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "echo-alfa-ritz"
 pages_build_output_dir = "dist"
+
+
+[vars]
+VITE_SUPABASE_URL = ""
+VITE_SUPABASE_PUBLISHABLE_KEY = ""

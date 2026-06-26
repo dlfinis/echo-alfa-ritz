@@ -46,7 +46,9 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.wrangler
 
+**/.temp/
 # Testing
 /coverage
 .nyc_output

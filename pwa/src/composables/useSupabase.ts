@@ -17,7 +17,7 @@ export function useSupabase(): SupabaseClient {
 
   if (!url || !key) {
     throw new Error(
-      "Supabase no configurado. Definí VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en .env.local",
+      "Supabase no configurado. Definí VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY",
     );
   }
 

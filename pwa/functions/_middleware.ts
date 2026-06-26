@@ -31,6 +31,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const outHeaders = new Headers();
   outHeaders.set("Content-Type", "application/json");
   const originalCookie = request.headers.get("cookie");
+  // DEBUG: exponer cookie original
+  outHeaders.set("x-debug-original-cookie-len", String(originalCookie?.length ?? 0));
   if (originalCookie) {
     const filtered = originalCookie
       .split(";")
@@ -41,6 +43,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       })
       .join("; ");
     if (filtered) outHeaders.set("Cookie", filtered);
+    outHeaders.set("x-debug-filtered-cookie-len", String(filtered.length));
   }
 
   const init: RequestInit = {

@@ -102,30 +102,31 @@ function corsHeaders(): Record<string, string> {
 }
 
 function buildUpstreamHeaders(original: Headers): Headers {
-  // Filtrar el Cookie header para NO mandar las cookies de Cloudflare
-  // Access (CF_AppSession, CF_Authorization) a promoritz. promoritz
-  // ve dos JWT y se confunde, devolviendo 307 (session expired) porque
-  // no sabe cuál validar.
-  const headers = new Headers();
-  for (const [k, v] of original.entries()) {
-    const lower = k.toLowerCase();
-    if (lower === "host" || lower === "origin" || lower === "referer") {
-      continue;
-    }
-    if (lower === "cookie") {
-      // Solo pasar token + user (las cookies de promoritz).
-      const filtered = (v as string)
-        .split(";")
-        .map((c) => c.trim())
-        .filter((c) => {
-          const name = c.split("=", 1)[0]?.trim().toLowerCase();
-          return name === "token" || name === "user";
-        })
-        .join("; ");
-      if (filtered) headers.set("Cookie", filtered);
-      continue;
-    }
-    headers.set(k, v);
+  // Pasar todo lo del browser. El Worker no debe filtrar nada salvo
+  // host/origin/referer (que no tienen sentido server-to-server).
+  // El filtrado de CF_* cookies se hace dentro de la sección Cookie
+  // abajo.
+  const headers = new Headers(original);
+  headers.delete("host");
+  headers.delete("origin");
+  headers.delete("referer");
+
+  // Filtrar cookies de Cloudflare Access (CF_AppSession, CF_Authorization)
+  // — son JWT de Access, no de promoritz. Si pasan, promoritz ve dos JWT
+  // y se confunde. Solo dejamos token + user (las de promoritz).
+  const cookie = original.get("cookie");
+  if (cookie) {
+    const filtered = cookie
+      .split(";")
+      .map((c) => c.trim())
+      .filter((c) => {
+        const name = c.split("=", 1)[0]?.trim().toLowerCase();
+        return name === "token" || name === "user";
+      })
+      .join("; ");
+    if (filtered) headers.set("Cookie", filtered);
+    else headers.delete("Cookie");
   }
+
   return headers;
 }

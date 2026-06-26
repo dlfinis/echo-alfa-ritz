@@ -53,12 +53,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   try {
     const upstream = await fetch(upstreamUrl, init);
 
+    // DEBUG: exponer qué headers se mandaron a promoritz
+    const debugHeaders: Record<string, string> = {};
+    for (const [k, v] of (init.headers as Headers).entries()) {
+      debugHeaders[k] = v;
+    }
+
     // 3xx → 401 session_expired para auto-relogin en el PWA
     if (upstream.status >= 300 && upstream.status < 400) {
       return new Response(
         JSON.stringify({
           error: "session_expired",
           message: `Promoritz redirect (${upstream.status})`,
+          sentHeaders: debugHeaders,
         }),
         { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders() } },
       );
@@ -71,6 +78,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         responseHeaders.set(k, v);
       }
     }
+    responseHeaders.set("x-debug-upstream-status", String(upstream.status));
+    responseHeaders.set("x-debug-sent-cookie", (init.headers as Headers).get("cookie") ?? "(none)");
     Object.entries(corsHeaders()).forEach(([k, v]) => responseHeaders.set(k, v));
 
     return new Response(upstream.body, {

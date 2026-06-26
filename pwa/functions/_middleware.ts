@@ -26,29 +26,30 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     body = await request.arrayBuffer();
   }
 
-  // Filtrar Cookie: descartar CF_AppSession y CF_Authorization (JWTs de
-  // Cloudflare Access que confunden a promoritz si llegan).
-  const outHeaders = new Headers();
-  outHeaders.set("Content-Type", "application/json");
-  const originalCookie = request.headers.get("cookie");
-  // DEBUG: exponer cookie original Y las cookies que detectó el filter
-  if (originalCookie) {
-    const cookieNames = originalCookie
-      .split(";")
-      .map((c) => c.trim().split("=", 1)[0]?.trim() ?? "(unnamed)");
-    outHeaders.set("x-debug-cookie-names", cookieNames.join(","));
-    outHeaders.set("x-debug-original-cookie-len", String(originalCookie.length));
-    const filtered = originalCookie
-      .split(";")
-      .map((c) => c.trim())
-      .filter((c) => {
-        const name = c.split("=", 1)[0]?.trim().toLowerCase();
-        return name === "token" || name === "user";
-      })
-      .join("; ");
-    if (filtered) outHeaders.set("Cookie", filtered);
-    outHeaders.set("x-debug-filtered-cookie-len", String(filtered.length));
-  }
+  // Cookie: descartar SOLO CF_AppSession y CF_Authorization (JWTs de
+// Cloudflare Access que confunden a promoritz). Mantener todo lo demás
+// (token, user, y cualquier otro que mande el browser).
+const outHeaders = new Headers();
+outHeaders.set("Content-Type", "application/json");
+const originalCookie = request.headers.get("cookie");
+if (originalCookie) {
+  const cookieNames = originalCookie
+    .split(";")
+    .map((c) => c.trim().split("=", 1)[0]?.trim() ?? "(unnamed)");
+  outHeaders.set("x-debug-cookie-names", cookieNames.join(","));
+  outHeaders.set("x-debug-original-cookie-len", String(originalCookie.length));
+  const filtered = originalCookie
+    .split(";")
+    .map((c) => c.trim())
+    .filter((c) => {
+      const name = c.split("=", 1)[0]?.trim().toLowerCase();
+      // Keep todo menos las cookies de Cloudflare Access
+      return !name.startsWith("cf_") && name !== "cf-authorization" && name !== "cf-appsession";
+    })
+    .join("; ");
+  if (filtered) outHeaders.set("Cookie", filtered);
+  outHeaders.set("x-debug-filtered-cookie-len", String(filtered.length));
+}
 
   const init: RequestInit = {
     method: request.method,

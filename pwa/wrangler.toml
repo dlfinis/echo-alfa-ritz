@@ -1,25 +1,15 @@
 # wrangler.toml — Cloudflare Pages deploy
 #
-# Uso manual (desde pwa/):
-#   pnpm exec wrangler pages deploy dist
+# Variables de entorno para Vite (build-time): se configuran en el
+# dashboard de Cloudflare Pages, NO acá.
+#   Cloudflare → Workers & Pages → echo-alfa-ritz → Settings →
+#   Environment variables → Production:
+#     VITE_SUPABASE_URL = https://cxonjoojvkmpxkessasp.supabase.co
+#     VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
 #
-# Uso automático (GitHub → Cloudflare Pages):
-#   Conectar repo en https://dash.cloudflare.com → Workers & Pages → Create
-#   Build command: pnpm build
-#   Build output dir: pwa/dist
-#   Root dir: (dejar vacío)
+# Para local dev: usar pwa/.env.local (gitignored).
+# Para secrets reales del Worker (no build-time): wrangler pages secret put.
 
 #:schema node_modules/wrangler/config-schema.json
 name = "echo-alfa-ritz"
 pages_build_output_dir = "dist"
-
-# Vite build-time vars. Estas son la anon/publishable key de Supabase —
-# PUBLICAS por diseño, protegidas por RLS en el servidor. Se bakean al
-# bundle en build time (Vite las lee como import.meta.env.VITE_*).
-#
-# IMPORTANTE: rotar en Supabase Dashboard → Settings → API → Publishable key
-# si alguna vez se filtra fuera del repo. Las que están acá YA están en el
-# historial de git; rotar es la única forma de invalidar esa copia.
-[vars]
-VITE_SUPABASE_URL = "https://cxonjoojvkmpxkessasp.supabase.co"
-VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_D1DUr1qjk4wB0dXiKxd4xw_thvSz1qv"

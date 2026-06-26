@@ -4,97 +4,83 @@
 // promoritz.com/ec. Server-to-server → no hay CORS.
 //
 // Cubre TODAS las rutas bajo /api/promoritz/* reescribiendo
-// /api/promoritz → /ec. La PWA llama siempre a /api/promoritz/* — el
-// entorno (Vite dev o este Worker en prod) decide quién proxy.
+// /api/promoritz → /ec.
 
 interface Env {}
 
 export const onRequest: PagesFunction<Env> = async (context) => {
-  const { request, next } = context;
-  const url = new URL(request.url);
+  try {
+    const { request, next } = context;
+    const url = new URL(request.url);
 
-  if (!url.pathname.startsWith("/api/promoritz/")) {
-    return next();
-  }
-
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() });
-  }
-
-  const upstreamPath = url.pathname.replace(/^\/api\/promoritz/, "/ec");
-  const upstreamUrl = `https://promoritz.com${upstreamPath}${url.search}`;
-
-  // Bufferear el body como ArrayBuffer. request.body es un ReadableStream
-  // (one-time-use); si promoritz responde 3xx, Workers no puede replay el
-  // stream → throws upstream_unreachable.
-  let body: ArrayBuffer | undefined;
-  if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
-    try {
-      body = await request.arrayBuffer();
-    } catch (e) {
-      return jsonError(400, "body_read_failed", String(e));
+    if (!url.pathname.startsWith("/api/promoritz/")) {
+      return next();
     }
-  }
 
-  const init: RequestInit = {
-    method: request.method,
-    headers: buildUpstreamHeaders(request.headers),
-    body,
-    redirect: "manual",
-  };
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(upstreamUrl, init);
-  } catch (e) {
-    return jsonError(502, "upstream_unreachable", String(e));
-  }
+    const upstreamPath = url.pathname.replace(/^\/api\/promoritz/, "/ec");
+    const upstreamUrl = `https://promoritz.com${upstreamPath}${url.search}`;
 
-  // Mapear 3xx → 401 (sesión expirada) para que el PWA haga auto-relogin.
-  if (upstream.status >= 300 && upstream.status < 400) {
-    return jsonError(
-      401,
-      "session_expired",
-      `Promoritz redirect (${upstream.status})`,
-    );
-  }
+    // Bufferear el body como ArrayBuffer (request.body es ReadableStream
+    // one-time-use; si promoritz responde 3xx, Workers no puede replay el
+    // stream → throws).
+    let body: ArrayBuffer | undefined;
+    if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
+      body = await request.arrayBuffer();
+    }
 
-  // Construir headers para el browser.
-  //
-  // Truco clave para este runtime: NO usar new Headers() y .set()
-  // (porque bloquea "set-cookie"). En su lugar, crear un plain object,
-  // agregar los CORS headers, y pasar ese objeto al constructor de Response.
-  const outHeaders: Record<string, string> = {};
+    const init: RequestInit = {
+      method: request.method,
+      headers: buildUpstreamHeaders(request.headers),
+      body,
+      redirect: "manual",
+    };
 
-  try {
+    const upstream = await fetch(upstreamUrl, init);
+
+    // Mapear 3xx → 401 (sesión expirada) para que el PWA haga auto-relogin.
+    if (upstream.status >= 300 && upstream.status < 400) {
+      return new Response(
+        JSON.stringify({
+          error: "session_expired",
+          message: `Promoritz redirect (${upstream.status})`,
+        }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+      );
+    }
+
+    // Construir headers pasando todo lo del upstream. No tocamos set-cookie
+    // porque en este runtime getSetCookie no existe y los Headers no lo
+    // exponen vía entries(). El PWA usa body fallback para capturar el
+    // token desde la respuesta JSON.
+    const outHeaders: Record<string, string> = {};
     for (const [k, v] of upstream.headers.entries()) {
       if (k.toLowerCase() !== "set-cookie") {
         outHeaders[k] = v;
       }
     }
-  } catch (e) {
-    return jsonError(500, "headers_iter_failed", String(e));
-  }
+    Object.entries(corsHeaders()).forEach(([k, v]) => (outHeaders[k] = v));
 
-  Object.entries(corsHeaders()).forEach(([k, v]) => (outHeaders[k] = v));
-
-  try {
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
       headers: outHeaders,
     });
   } catch (e) {
-    return jsonError(500, "response_build_failed", String(e));
+    // Catch-all: cualquier error inesperado lo reportamos con JSON
+    // estructurado en vez de tirar 500 opaco.
+    return new Response(
+      JSON.stringify({
+        error: "worker_crash",
+        message: e instanceof Error ? `${e.message}\n${e.stack}` : String(e),
+      }),
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+    );
   }
 };
-
-function jsonError(status: number, error: string, message: string): Response {
-  return new Response(
-    JSON.stringify({ error, message }),
-    { status, headers: { "Content-Type": "application/json", ...corsHeaders() } },
-  );
-}
 
 function corsHeaders(): Record<string, string> {
   return {
@@ -108,9 +94,10 @@ function corsHeaders(): Record<string, string> {
 }
 
 function buildUpstreamHeaders(original: Headers): Headers {
-  // Construir a mano para evitar problemas con `new Headers(original)`
-  // cuando el request viene detrás de Cloudflare Access (que añade
-  // headers como Cf-Access-Client-Id, Cf-Warp-Tag-Id, etc.).
+  // Solo pasar headers seguros a promoritz. Excluimos:
+  //   - host/origin/referer: no tienen sentido server-to-server
+  //   - cf-*: headers que añade Cloudflare Access/proxy
+  //   - x-forwarded-*: los pone Cloudflare ya
   const headers = new Headers();
   for (const [k, v] of original.entries()) {
     const lower = k.toLowerCase();
@@ -119,10 +106,7 @@ function buildUpstreamHeaders(original: Headers): Headers {
       lower === "origin" ||
       lower === "referer" ||
       lower.startsWith("cf-") ||
-      lower === "cf-connecting-ip" ||
-      lower === "x-forwarded-for" ||
-      lower === "x-forwarded-proto" ||
-      lower === "x-real-ip"
+      lower.startsWith("x-forwarded-")
     ) {
       continue;
     }

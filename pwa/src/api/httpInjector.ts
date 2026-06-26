@@ -72,14 +72,20 @@ export class HttpInjector implements IInjectionStrategy {
     });
 
     if (res.status >= 200 && res.status < 300) {
+      // CRÍTICO: limpiar cookies viejas ANTES de capturar las nuevas.
+      //
+      // Si el jar ya tiene cookies (de localStorage o un login previo
+      // expirado), hasSession() devolvería true y el body fallback se
+      // saltaría — el jar quedaría con cookies viejas y el primer
+      // inyectar fallaría con 307 (sesión expirada) → Worker 401.
+      this.jar.clear();
+
       // Camino 1: leer cookies del response (vía x-set-cookie custom header
       // del Worker — depende de Access-Control-Expose-Headers).
       this.jar.setFromResponse(res.headers);
 
       // Camino 2 (fallback robusto): si por algún motivo las cookies no
       // llegaron vía headers, parsear el token directamente del body JSON.
-      // El endpoint de promoritz devuelve {id, email, ..., token: "eyJ..."}
-      // y podemos inyectar `token` + `user` sintéticos en el jar.
       if (!this.jar.hasSession()) {
         try {
           const body = (await res.clone().json()) as {

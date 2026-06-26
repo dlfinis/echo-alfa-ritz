@@ -13,8 +13,3 @@
 #:schema node_modules/wrangler/config-schema.json
 name = "echo-alfa-ritz"
 pages_build_output_dir = "dist"
-
-
-[vars]
-VITE_SUPABASE_URL = ""
-VITE_SUPABASE_PUBLISHABLE_KEY = ""

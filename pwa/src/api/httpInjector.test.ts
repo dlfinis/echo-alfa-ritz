@@ -311,6 +311,57 @@ describe("HttpInjector", () => {
     expect(resultado.mensaje).toContain("relogin falló");
   });
 
+  it("limpia cookies stale antes de capturar las nuevas (evita 401 con sesión expirada)", async () => {
+    // Simula: el jar ya tiene cookies viejas (de localStorage o login
+    // previo expirado). Sin el clear(), hasSession() devolvería true y
+    // el body fallback se saltaría → el primer inyectar fallaría con
+    // 307 → Worker 401 porque promoritz recibe las cookies viejas.
+    const mockFetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/api/users/login")) {
+        return new Response(
+          JSON.stringify({
+            id: "fresh-id",
+            name: "Fresh",
+            lastname: "User",
+            email: "fresh@example.com",
+            token: "fresh-jwt",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      // inyectar recibe cookie con el token FRESCO, no el viejo
+      return new Response(
+        JSON.stringify({
+          brand: "Ritz",
+          product: "Mini Ritz",
+          lote: "AB123456789",
+          username: "Fresh User",
+          userId: "fresh-id",
+          whatsapp: true,
+          isReemplazo: false,
+          referredBy: null,
+          id: "lote-fresh",
+          createdAt: new Date().toISOString(),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const jar = new InMemoryCookieJar();
+    jar.cookies["token"] = "stale-jwt-expired";
+    jar.cookies["user"] = "stale-user-data";
+
+    const injector = new HttpInjector({
+      email: "test@example.com",
+      fetchImpl: mockFetch,
+      cookieJar: jar,
+    });
+
+    await injector.login();
+    expect(jar.cookies["token"]).toBe("fresh-jwt"); // No "stale-jwt-expired"
+  });
+
   it("fallback: parsea token del body JSON si los headers no traen cookies", async () => {
     // Simula un browser que NO expone x-set-cookie (CORS sin
     // Access-Control-Expose-Headers). El response no tiene set-cookie ni

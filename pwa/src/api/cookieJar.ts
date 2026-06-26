@@ -19,6 +19,7 @@ export interface CookieJar {
   setFromResponse(headers: Headers): void;
   toCookieHeader(): string;
   hasSession(): boolean;
+  clear(): void;
 }
 
 export class InMemoryCookieJar implements CookieJar {

@@ -29,7 +29,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   // stream → throws upstream_unreachable.
   let body: ArrayBuffer | undefined;
   if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
-    body = await request.arrayBuffer();
+    try {
+      body = await request.arrayBuffer();
+    } catch (e) {
+      return jsonError(400, "body_read_failed", String(e));
+    }
   }
 
   const init: RequestInit = {
@@ -43,55 +47,54 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   try {
     upstream = await fetch(upstreamUrl, init);
   } catch (e) {
-    return new Response(
-      JSON.stringify({
-        error: "upstream_unreachable",
-        message: e instanceof Error ? e.message : String(e),
-      }),
-      { status: 502, headers: { "Content-Type": "application/json", ...corsHeaders() } },
-    );
+    return jsonError(502, "upstream_unreachable", String(e));
   }
 
   // Mapear 3xx → 401 (sesión expirada) para que el PWA haga auto-relogin.
   if (upstream.status >= 300 && upstream.status < 400) {
-    return new Response(
-      JSON.stringify({
-        error: "session_expired",
-        message: `Promoritz redirect (${upstream.status})`,
-      }),
-      { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+    return jsonError(
+      401,
+      "session_expired",
+      `Promoritz redirect (${upstream.status})`,
     );
   }
 
   // Construir headers para el browser.
   //
   // Truco clave para este runtime: NO usar new Headers() y .set()
-  // (porque bloquea "set-cookie"). En su lugar, usar Object.fromEntries
-  // para crear un plain object, agregar set-cookie como string, agregar
-  // los CORS headers, y pasar ese objeto al constructor de Response.
-  //
-  // Esto preserva las Set-Cookie originales del upstream sin invocar el
-  // método bloqueado. El browser las recibe normalmente porque
-  // credentials: 'include' + Access-Control-Allow-Credentials: true
-  // está en los CORS headers.
+  // (porque bloquea "set-cookie"). En su lugar, crear un plain object,
+  // agregar los CORS headers, y pasar ese objeto al constructor de Response.
   const outHeaders: Record<string, string> = {};
 
-  // Pasar todos los headers del upstream EXCEPTO set-cookie (lo manejamos aparte)
-  for (const [k, v] of upstream.headers.entries()) {
-    if (k.toLowerCase() !== "set-cookie") {
-      outHeaders[k] = v;
+  try {
+    for (const [k, v] of upstream.headers.entries()) {
+      if (k.toLowerCase() !== "set-cookie") {
+        outHeaders[k] = v;
+      }
     }
+  } catch (e) {
+    return jsonError(500, "headers_iter_failed", String(e));
   }
 
-  // Agregar CORS + expose
   Object.entries(corsHeaders()).forEach(([k, v]) => (outHeaders[k] = v));
 
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: outHeaders,
-  });
+  try {
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: outHeaders,
+    });
+  } catch (e) {
+    return jsonError(500, "response_build_failed", String(e));
+  }
 };
+
+function jsonError(status: number, error: string, message: string): Response {
+  return new Response(
+    JSON.stringify({ error, message }),
+    { status, headers: { "Content-Type": "application/json", ...corsHeaders() } },
+  );
+}
 
 function corsHeaders(): Record<string, string> {
   return {
@@ -105,9 +108,25 @@ function corsHeaders(): Record<string, string> {
 }
 
 function buildUpstreamHeaders(original: Headers): Headers {
-  const headers = new Headers(original);
-  headers.delete("host");
-  headers.delete("origin");
-  headers.delete("referer");
+  // Construir a mano para evitar problemas con `new Headers(original)`
+  // cuando el request viene detrás de Cloudflare Access (que añade
+  // headers como Cf-Access-Client-Id, Cf-Warp-Tag-Id, etc.).
+  const headers = new Headers();
+  for (const [k, v] of original.entries()) {
+    const lower = k.toLowerCase();
+    if (
+      lower === "host" ||
+      lower === "origin" ||
+      lower === "referer" ||
+      lower.startsWith("cf-") ||
+      lower === "cf-connecting-ip" ||
+      lower === "x-forwarded-for" ||
+      lower === "x-forwarded-proto" ||
+      lower === "x-real-ip"
+    ) {
+      continue;
+    }
+    headers.set(k, v);
+  }
   return headers;
 }

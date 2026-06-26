@@ -141,11 +141,16 @@ export class HttpInjector implements IInjectionStrategy {
     }
 
     if (!this.jar.hasSession()) {
+      console.log("[inyectar] jar vacío, llamando login()");
       const logged = await this.login();
       if (!logged) return this.fail(lote, "Sin sesión activa y login falló");
+      console.log("[inyectar] login() OK, jar tiene:", Object.keys(this.jar.cookies));
+    } else {
+      console.log("[inyectar] jar ya tiene sesión, cookies:", Object.keys(this.jar.cookies));
     }
 
     let res = await this.postLote(lote);
+    console.log(`[inyectar] postLote inicial → HTTP ${res.status}, cookie enviado: ${this.jar.toCookieHeader().slice(0, 80)}...`);
 
     // Auto-recovery robusto:
     //   - 401 o 3xx → sesión expirada, relogin + retry una vez
@@ -157,11 +162,15 @@ export class HttpInjector implements IInjectionStrategy {
       (res.status >= 500 && res.status < 600);
 
     if (needsRelogin) {
+      console.log(`[inyectar] needsRelogin=true, llamando login() para refrescar`);
       const reLogged = await this.login();
       if (!reLogged) {
+        console.log(`[inyectar] relogin falló, abortando`);
         return this.fail(lote, `Sesión o server caído (HTTP ${res.status}) y relogin falló`);
       }
+      console.log("[inyectar] relogin OK, jar después:", Object.keys(this.jar.cookies));
       res = await this.postLote(lote);
+      console.log(`[inyectar] postLote retry → HTTP ${res.status}, cookie enviado: ${this.jar.toCookieHeader().slice(0, 80)}...`);
     }
 
     this.jar.setFromResponse(res.headers);
@@ -190,6 +199,7 @@ export class HttpInjector implements IInjectionStrategy {
       return this.fail(lote, `Validación rechazada (400): ${await res.text()}`);
     }
 
+    console.log(`[inyectar] postLote final → HTTP ${res.status}, mensaje del server:`, await res.clone().text().catch(() => "(no body)"));
     return this.fail(lote, `HTTP ${res.status}`);
   }
 

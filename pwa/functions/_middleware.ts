@@ -94,23 +94,12 @@ function corsHeaders(): Record<string, string> {
 }
 
 function buildUpstreamHeaders(original: Headers): Headers {
-  // Solo pasar headers seguros a promoritz. Excluimos:
-  //   - host/origin/referer: no tienen sentido server-to-server
-  //   - cf-*: headers que añade Cloudflare Access/proxy
-  //   - x-forwarded-*: los pone Cloudflare ya
-  const headers = new Headers();
-  for (const [k, v] of original.entries()) {
-    const lower = k.toLowerCase();
-    if (
-      lower === "host" ||
-      lower === "origin" ||
-      lower === "referer" ||
-      lower.startsWith("cf-") ||
-      lower.startsWith("x-forwarded-")
-    ) {
-      continue;
-    }
-    headers.set(k, v);
-  }
+  // Pasar todo lo del browser. NO filtramos cf-* porque puede romper
+  // headers legítimos. promoritz solo lee Cookie.
+  const headers = new Headers(original);
+  // Solo sacamos lo que no tiene sentido server-to-server.
+  headers.delete("host");
+  headers.delete("origin");
+  headers.delete("referer");
   return headers;
 }

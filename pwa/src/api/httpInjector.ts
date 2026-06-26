@@ -64,54 +64,64 @@ export class HttpInjector implements IInjectionStrategy {
 
   /** Ejecuta login y guarda cookies. */
   async login(): Promise<boolean> {
-    const res = await this.fetchImpl(`${this.baseUrl}/api/users/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email: this.email }),
-    });
+    // Reintentar hasta 3 veces si promoritz tira 5xx (rate limit intermitente).
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await this.fetchImpl(`${this.baseUrl}/api/users/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: this.email }),
+      });
 
-    if (res.status >= 200 && res.status < 300) {
-      // CRÍTICO: limpiar cookies viejas ANTES de capturar las nuevas.
-      //
-      // Si el jar ya tiene cookies (de localStorage o un login previo
-      // expirado), hasSession() devolvería true y el body fallback se
-      // saltaría — el jar quedaría con cookies viejas y el primer
-      // inyectar fallaría con 307 (sesión expirada) → Worker 401.
-      this.jar.clear();
+      if (res.status >= 200 && res.status < 300) {
+        // CRÍTICO: limpiar cookies viejas ANTES de capturar las nuevas.
+        //
+        // Si el jar ya tiene cookies (de localStorage o un login previo
+        // expirado), hasSession() devolvería true y el body fallback se
+        // saltaría — el jar quedaría con cookies viejas y el primer
+        // inyectar fallaría con 307 (sesión expirada) → Worker 401.
+        this.jar.clear();
 
-      // Camino 1: leer cookies del response (vía x-set-cookie custom header
-      // del Worker — depende de Access-Control-Expose-Headers).
-      this.jar.setFromResponse(res.headers);
+        // Camino 1: leer cookies del response (vía x-set-cookie custom header
+        // del Worker — depende de Access-Control-Expose-Headers).
+        this.jar.setFromResponse(res.headers);
 
-      // Camino 2 (fallback robusto): si por algún motivo las cookies no
-      // llegaron vía headers, parsear el token directamente del body JSON.
-      if (!this.jar.hasSession()) {
-        try {
-          const body = (await res.clone().json()) as {
-            token?: string;
-            id?: string;
-            email?: string;
-            name?: string;
-            lastname?: string;
-          };
-          if (body.token) {
-            this.jar.cookies["token"] = body.token;
-            this.jar.cookies["user"] = encodeURIComponent(
-              JSON.stringify({
-                id: body.id,
-                name: body.name,
-                lastname: body.lastname,
-                email: body.email,
-              }),
-            );
+        // Camino 2 (fallback robusto): si por algún motivo las cookies no
+        // llegaron vía headers, parsear el token directamente del body JSON.
+        if (!this.jar.hasSession()) {
+          try {
+            const body = (await res.clone().json()) as {
+              token?: string;
+              id?: string;
+              email?: string;
+              name?: string;
+              lastname?: string;
+            };
+            if (body.token) {
+              this.jar.cookies["token"] = body.token;
+              this.jar.cookies["user"] = encodeURIComponent(
+                JSON.stringify({
+                  id: body.id,
+                  name: body.name,
+                  lastname: body.lastname,
+                  email: body.email,
+                }),
+              );
+            }
+          } catch {
+            // body no era JSON, ignorar
           }
-        } catch {
-          // body no era JSON, ignorar
         }
+
+        return this.jar.hasSession();
       }
 
-      return this.jar.hasSession();
+      // Si es 5xx, esperar un poco y reintentar. Si es 4xx (no 429), abortar.
+      if (res.status >= 500 && res.status < 600 && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        continue;
+      }
+      return false;
     }
     return false;
   }
@@ -137,13 +147,20 @@ export class HttpInjector implements IInjectionStrategy {
 
     let res = await this.postLote(lote);
 
-    // Auto-relogin: el Worker mapea 307 de promoritz → 401 aquí (cuerpo
-    // JSON con `error: "session_expired"`). Si vemos 401 o un 3xx que se
-    // coló, asumimos sesión expirada y reintentamos UNA vez con cookie
-    // fresca.
-    if (res.status === 401 || (res.status >= 300 && res.status < 400)) {
+    // Auto-recovery robusto:
+    //   - 401 o 3xx → sesión expirada, relogin + retry una vez
+    //   - 5xx → promoritz/cloudflare intermitente, login fresh + retry
+    //   - 4xx (no 401) → error definitivo del server, no reintentar
+    const needsRelogin =
+      res.status === 401 ||
+      (res.status >= 300 && res.status < 400) ||
+      (res.status >= 500 && res.status < 600);
+
+    if (needsRelogin) {
       const reLogged = await this.login();
-      if (!reLogged) return this.fail(lote, `Sesión expirada (HTTP ${res.status}) y relogin falló`);
+      if (!reLogged) {
+        return this.fail(lote, `Sesión o server caído (HTTP ${res.status}) y relogin falló`);
+      }
       res = await this.postLote(lote);
     }
 

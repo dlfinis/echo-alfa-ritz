@@ -292,11 +292,14 @@ describe("HttpInjector", () => {
     expect(resultado.mensaje).toContain("lote-post-relogin");
   });
 
-  it("marca FAILED si el re-login no logra renovar la sesión", async () => {
+  it("marca FAILED si el re-login no logra renovar la sesión (5xx reintenta 3 veces)", async () => {
     const { fetch: mockFetch, calls } = crearFetchMock([
       { status: 200, setCookies: ["token=viejo"] },
       { status: 401, body: { error: "session_expired" } },
-      { status: 500, body: { error: "down" } }, // re-login falla
+      // Login reintenta 3 veces ante 5xx (delay backoff 800ms, 1600ms)
+      { status: 500, body: { error: "down" } },
+      { status: 500, body: { error: "down" } },
+      { status: 500, body: { error: "down" } },
     ]);
 
     const injector = new HttpInjector({
@@ -306,7 +309,8 @@ describe("HttpInjector", () => {
     });
 
     const resultado = await injector.inyectar(loteBase);
-    expect(calls).toHaveLength(3);
+    // 1: login inicial, 2: postLote, 3-5: tres reintentos de relogin
+    expect(calls).toHaveLength(5);
     expect(resultado.status).toBe(INJECTION_RESULT.FAILED);
     expect(resultado.mensaje).toContain("relogin falló");
   });

@@ -64,6 +64,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
     Object.entries(corsHeaders()).forEach(([k, v]) => (outHeaders[k] = v));
 
+    // DEBUG: exponer qué Cookie header se mandó a promoritz
+    try {
+      const sentCookie = (init.headers as Headers).get("cookie") ?? "";
+      if (sentCookie) {
+        outHeaders["x-debug-sent-cookie"] = sentCookie.slice(0, 500);
+      }
+    } catch {}
+
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,

@@ -12,4 +12,6 @@
 
 #:schema node_modules/wrangler/config-schema.json
 name = "echo-alfa-ritz"
-pages_build_output_dir = "dist"
+# Relativo al repo root (no al working dir). El build `pnpm build`
+# corre desde root y produce pwa/dist/, NO dist/.
+pages_build_output_dir = "pwa/dist"

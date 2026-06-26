@@ -211,11 +211,18 @@ if (!this.jar.hasSession()) {
   }
 
   private async postLote(lote: Lote): Promise<Response> {
+    // IMPORTANTE: las cookies (token, user) están en InMemoryCookieJar
+    // (variables JS), NO en document.cookie. Si las mandamos en el
+    // header Cookie, el browser las REEMPLAZA con las cookies del origin
+    // (CF_AppSession, CF_Authorization de Cloudflare Access). Por eso
+    // mandamos token y user como CUSTOM HEADERS — el Worker los extrae y
+    // construye la Cookie header para promoritz.
     return this.fetchImpl(`${this.baseUrl}/api/lotes`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: this.jar.toCookieHeader(),
+        "X-Promoritz-Token": this.jar.cookies["token"] ?? "",
+        "X-Promoritz-User": this.jar.cookies["user"] ?? "",
       },
       credentials: "include",
       body: JSON.stringify({ lote: lote.numero, product: lote.producto }),

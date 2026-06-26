@@ -26,29 +26,23 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     body = await request.arrayBuffer();
   }
 
-  // Cookie: descartar SOLO CF_AppSession y CF_Authorization (JWTs de
-// Cloudflare Access que confunden a promoritz). Mantener todo lo demás
-// (token, user, y cualquier otro que mande el browser).
+  // Construir Cookie header para promoritz desde custom headers.
+// El browser reemplaza el header Cookie con sus propias cookies del origin
+// (CF_*), así que el PWA manda token/user como X-Promoritz-* y nosotros
+// los extraemos aquí.
 const outHeaders = new Headers();
 outHeaders.set("Content-Type", "application/json");
-const originalCookie = request.headers.get("cookie");
-if (originalCookie) {
-  const cookieNames = originalCookie
-    .split(";")
-    .map((c) => c.trim().split("=", 1)[0]?.trim() ?? "(unnamed)");
-  outHeaders.set("x-debug-cookie-names", cookieNames.join(","));
-  outHeaders.set("x-debug-original-cookie-len", String(originalCookie.length));
-  const filtered = originalCookie
-    .split(";")
-    .map((c) => c.trim())
-    .filter((c) => {
-      const name = c.split("=", 1)[0]?.trim().toLowerCase();
-      // Keep todo menos las cookies de Cloudflare Access
-      return !name.startsWith("cf_") && name !== "cf-authorization" && name !== "cf-appsession";
-    })
-    .join("; ");
-  if (filtered) outHeaders.set("Cookie", filtered);
-  outHeaders.set("x-debug-filtered-cookie-len", String(filtered.length));
+const token = request.headers.get("x-promoritz-token");
+const user = request.headers.get("x-promoritz-user");
+outHeaders.set("x-debug-token-len", String(token?.length ?? 0));
+outHeaders.set("x-debug-user-len", String(user?.length ?? 0));
+if (token) outHeaders.set("x-promoritz-token", token);  // DEBUG
+if (user) outHeaders.set("x-promoritz-user", user);     // DEBUG
+const cookieParts: string[] = [];
+if (token) cookieParts.push(`token=${token}`);
+if (user) cookieParts.push(`user=${user}`);
+if (cookieParts.length > 0) {
+  outHeaders.set("Cookie", cookieParts.join("; "));
 }
 
   const init: RequestInit = {

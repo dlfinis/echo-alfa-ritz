@@ -95,7 +95,7 @@ describe("HttpInjector", () => {
     const { fetch: mockFetch, calls } = crearFetchMock([
       {
         status: 200,
-        setCookies: ["session=abc123; Path=/; HttpOnly"],
+        setCookies: ["token=abc123; Path=/; HttpOnly"],
         body: { ok: true },
       },
       {
@@ -132,7 +132,7 @@ describe("HttpInjector", () => {
     expect(calls[1].url).toMatch(/\/api\/lotes$/);
     const headers = new Headers(calls[1].init.headers);
     expect(headers.get("content-type")).toBe("application/json");
-    expect(headers.get("cookie")).toBe("session=abc123");
+    expect(headers.get("x-promoritz-token")).toBe("abc123");
     expect(JSON.parse(calls[1].init.body as string)).toEqual({
       lote: "AB123456789",
       product: "Mini Ritz",
@@ -287,7 +287,7 @@ describe("HttpInjector", () => {
     expect(calls[3].url).toMatch(/\/api\/lotes$/);          // inyectar retry (200)
     // El segundo inyectar va con la cookie fresca
     const headersRetry = new Headers(calls[3].init.headers);
-    expect(headersRetry.get("cookie")).toBe("token=fresca");
+    expect(headersRetry.get("x-promoritz-token")).toBe("fresca");
     expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
     expect(resultado.mensaje).toContain("lote-post-relogin");
   });

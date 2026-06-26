@@ -31,9 +31,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const outHeaders = new Headers();
   outHeaders.set("Content-Type", "application/json");
   const originalCookie = request.headers.get("cookie");
-  // DEBUG: exponer cookie original
-  outHeaders.set("x-debug-original-cookie-len", String(originalCookie?.length ?? 0));
+  // DEBUG: exponer cookie original Y las cookies que detectó el filter
   if (originalCookie) {
+    const cookieNames = originalCookie
+      .split(";")
+      .map((c) => c.trim().split("=", 1)[0]?.trim() ?? "(unnamed)");
+    outHeaders.set("x-debug-cookie-names", cookieNames.join(","));
+    outHeaders.set("x-debug-original-cookie-len", String(originalCookie.length));
     const filtered = originalCookie
       .split(";")
       .map((c) => c.trim())

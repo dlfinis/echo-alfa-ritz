@@ -88,30 +88,37 @@ export class HttpInjector implements IInjectionStrategy {
 
         // Camino 2 (fallback robusto): si por algún motivo las cookies no
         // llegaron vía headers, parsear el token directamente del body JSON.
-        if (!this.jar.hasSession()) {
-          try {
-            const body = (await res.clone().json()) as {
-              token?: string;
-              id?: string;
-              email?: string;
-              name?: string;
-              lastname?: string;
-            };
-            if (body.token) {
-              this.jar.cookies["token"] = body.token;
-              this.jar.cookies["user"] = encodeURIComponent(
-                JSON.stringify({
-                  id: body.id,
-                  name: body.name,
-                  lastname: body.lastname,
-                  email: body.email,
-                }),
-              );
-            }
-          } catch {
-            // body no era JSON, ignorar
+if (!this.jar.hasSession()) {
+        try {
+          const body = (await res.clone().json()) as {
+            token?: string;
+            id?: string;
+            email?: string;
+            name?: string;
+            lastname?: string;
+          };
+          console.log("[login] response body keys:", Object.keys(body));
+          console.log("[login] token starts with:", (body.token ?? "").slice(0, 30));
+          console.log("[login] body.id:", body.id);
+          if (body.token) {
+            this.jar.cookies["token"] = body.token;
+            this.jar.cookies["user"] = encodeURIComponent(
+              JSON.stringify({
+                id: body.id,
+                name: body.name,
+                lastname: body.lastname,
+                email: body.email,
+              }),
+            );
+            console.log("[login] synthesized cookies:", Object.keys(this.jar.cookies));
+            console.log("[login] cookies.token len:", this.jar.cookies["token"]?.length);
+          } else {
+            console.log("[login] NO TOKEN in body!");
           }
+        } catch (e) {
+          console.log("[login] body parse failed:", String(e));
         }
+      }
 
         return this.jar.hasSession();
       }

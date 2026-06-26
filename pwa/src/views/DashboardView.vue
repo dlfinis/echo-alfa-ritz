@@ -260,7 +260,9 @@ function openConfirm() {
 
 async function ejecutarConfirmado() {
   showConfirm.value = false;
-  await session.login();
+  // NO session.login() aquí: inyectar.inyectar() hace login solo si
+  // el jar está vacío, y auto-relogin si recibe 401/5xx. Hacer login
+  // acá duplicaba requests innecesarios.
   await runner.execute(undefined, {
     externalJar: session.jar,
     fastMode: !usarDelayConfig.value,

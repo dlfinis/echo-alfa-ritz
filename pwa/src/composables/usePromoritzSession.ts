@@ -131,14 +131,16 @@ export function usePromoritzSession() {
   watch(
     () => config.value?.activeAccountId,
     (newId) => {
-      if (_activeAccountId && _activeAccountId !== newId) {
-        // Guardar sesión de la cuenta ANTERIOR antes de cambiar
-        saveJar(_globalJar, _activeAccountId);
-        // Limpiar el jar en memoria para que loadJar(B) no mezcle sesiones
-        _globalJar.clear();
-      }
       if (newId) {
-        // Cargar sesión de la nueva cuenta
+        // Guardar sesión de la cuenta ANTERIOR (si hay y es diferente) antes
+        // de cambiar. Esto incluye el caso de primera carga (no-op).
+        if (_activeAccountId && _activeAccountId !== newId) {
+          saveJar(_globalJar, _activeAccountId);
+        }
+        // SIEMPRE limpiar el jar en memoria antes de cargar la nueva
+        // sesión. Sin esto, las cookies de la cuenta anterior se filtran
+        // a la nueva cuenta cuando la cuenta nueva no tiene sesión guardada.
+        _globalJar.clear();
         _activeAccountId = newId;
         loadJar(_globalJar, newId);
         updateIsLoggedIn();
@@ -150,8 +152,15 @@ export function usePromoritzSession() {
           sessionExpiresAt.value = null;
         }
       } else {
+        // No hay cuenta activa
+        _globalJar.clear();
         userData.value = null;
         sessionExpiresAt.value = null;
+        if (_autoRefreshTimer) {
+          clearTimeout(_autoRefreshTimer);
+          _autoRefreshTimer = null;
+        }
+        _activeAccountId = null;
       }
     },
     { immediate: true },

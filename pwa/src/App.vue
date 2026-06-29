@@ -25,31 +25,13 @@
 
           <span class="w-px h-5 bg-white/30 mx-1"></span>
 
-          <button
-            v-if="!session.isLoggedIn.value"
-            class="bg-white text-primary font-semibold px-3 py-1 rounded-full text-xs hover:bg-primary/90 hover:text-white transition"
-            :disabled="session.loading.value"
-            @click="session.login()"
+          <!-- ── AccountSwitcher: dropdown de cuenta + login ── -->
+          <AccountSwitcher />
+
+          <span
+            v-if="session.error.value && !session.isLoggedIn.value"
+            class="text-red-200 text-xs hidden md:inline"
           >
-            {{ session.loading.value ? "…" : "🔐 Login" }}
-          </button>
-          <div v-else class="flex items-center gap-2 text-sm">
-            <span
-              v-if="session.userData.value"
-              class="hidden md:inline"
-            >
-              👤 {{ session.userData.value.name }}
-            </span>
-            <button
-              class="bg-white/20 font-semibold px-3 py-1 rounded-full text-xs hover:bg-white/30 transition"
-              @click="session.logout()"
-              title="Cerrar sesión"
-            >
-              <i class="pi pi-sign-out" />
-              <span class="hidden sm:inline ml-1">Cerrar</span>
-            </button>
-          </div>
-          <span v-if="session.error.value && !session.isLoggedIn.value" class="text-red-200 text-xs hidden md:inline">
             {{ session.error.value }}
           </span>
         </nav>
@@ -64,8 +46,12 @@
 
 <script setup lang="ts">
 import CookieLogo from "./components/CookieLogo.vue";
+import AccountSwitcher from "./components/AccountSwitcher.vue";
+// Inicializar el singleton de accounts (suscripción Realtime)
+import { useAccounts } from "./composables/useAccounts.js";
 import { usePromoritzSession } from "./composables/usePromoritzSession.js";
 
+useAccounts();
 const session = usePromoritzSession();
 </script>
 

@@ -132,9 +132,10 @@ export function usePromoritzSession() {
     () => config.value?.activeAccountId,
     (newId) => {
       if (_activeAccountId && _activeAccountId !== newId) {
-        // Guardar sesión de la cuenta anterior antes de cambiar
+        // Guardar sesión de la cuenta ANTERIOR antes de cambiar
         saveJar(_globalJar, _activeAccountId);
-        clearJar(_activeAccountId);
+        // Limpiar el jar en memoria para que loadJar(B) no mezcle sesiones
+        _globalJar.clear();
       }
       if (newId) {
         // Cargar sesión de la nueva cuenta
@@ -148,6 +149,9 @@ export function usePromoritzSession() {
           userData.value = null;
           sessionExpiresAt.value = null;
         }
+      } else {
+        userData.value = null;
+        sessionExpiresAt.value = null;
       }
     },
     { immediate: true },

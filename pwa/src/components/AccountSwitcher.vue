@@ -8,7 +8,7 @@
     >
       <i :class="session.isLoggedIn ? 'pi pi-user text-base' : 'pi pi-lock text-base'" />
       <span class="hidden md:inline truncate max-w-[160px]">
-        {{ activeAccount?.email ?? "Sin cuenta" }}
+        {{ mainLabel }}
       </span>
       <i class="pi pi-angle-down text-xs" />
     </button>
@@ -130,9 +130,21 @@ const activeAccount = computed<Account | null>(() => {
 const titleText = computed(() => {
   if (!activeAccount.value) return "Sin cuenta configurada";
   if (session.isLoggedIn.value) {
-    return `Sesión activa: ${activeAccount.value.email}`;
+    const u = session.userData.value;
+    return `Sesión activa: ${u?.name ?? activeAccount.value.email} (${activeAccount.value.email})`;
   }
   return `Click para login en ${activeAccount.value.email}`;
+});
+
+// Nombre a mostrar en el botón principal: nombre del user de promoritz si
+// está logueado, sino el email de la cuenta.
+const mainLabel = computed(() => {
+  if (!activeAccount.value) return "Sin cuenta";
+  if (session.isLoggedIn.value && session.userData.value) {
+    const first = session.userData.value.name || "";
+    return first;
+  }
+  return activeAccount.value.email;
 });
 
 const expiresInMinValue = computed<number | null>(() => {

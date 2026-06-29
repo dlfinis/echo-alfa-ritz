@@ -7,7 +7,9 @@
       @click="open = !open"
     >
       <i :class="session.isLoggedIn ? 'pi pi-user text-base' : 'pi pi-lock text-base'" />
-      <span class="hidden md:inline truncate max-w-[160px]">{{ mainLabel }}</span>
+      <span class="hidden md:inline truncate max-w-[160px]">
+        {{ activeAccount?.email ?? "Sin cuenta" }}
+      </span>
       <i class="pi pi-angle-down text-xs" />
     </button>
 
@@ -121,14 +123,6 @@ const activeAccount = computed<Account | null>(() => {
   return accountList.value.find((a) => a.id === id) ?? null;
 });
 
-const mainLabel = computed(() => {
-  if (!activeAccount.value) return "Sin cuenta";
-  if (session.isLoggedIn.value && session.userData.value) {
-    return `👤 ${session.userData.value.name}`;
-  }
-  return activeAccount.value.email;
-});
-
 const titleText = computed(() => {
   if (!activeAccount.value) return "Sin cuenta configurada";
   if (session.isLoggedIn.value) {
@@ -164,8 +158,15 @@ async function onLogin() {
   await session.login();
 }
 
-function onLogout() {
-  session.logout();
+async function onLogout() {
+  console.log("[AccountSwitcher] onLogout clicked, calling session.logout()");
+  await session.logout();
+  console.log(
+    "[AccountSwitcher] session.logout() done, isLoggedIn:",
+    session.isLoggedIn.value,
+  );
+  // Forzar re-render del dropdown
+  await new Promise((r) => setTimeout(r, 100));
   // No cerramos el dropdown para que el user pueda ver que ya está deslogueado
 }
 

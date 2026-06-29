@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import {
   InMemoryCookieJar,
   HttpInjector,
@@ -6,7 +6,7 @@ import {
 } from "../api/index.js";
 import { useConfiguracion } from "./useConfiguracion.js";
 
-const LS_KEY = "promoritz_session";
+const LS_KEY_PREFIX = "promoritz_session:";
 
 interface UserData {
   id: string;
@@ -20,42 +20,65 @@ interface UserData {
   numdoc?: string;
 }
 
-/** Persiste el jar en localStorage para sobrevivir al refresh. */
-function saveJar(jar: InMemoryCookieJar) {
+/** Decodifica el payload del JWT (parte 2) sin verificar firma. */
+function decodeJwt(token: string): { exp?: number; iat?: number; id?: string } {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(jar.cookies));
+    const parts = token.split(".");
+    if (parts.length !== 3) return {};
+    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(padded));
+    return payload;
+  } catch {
+    return {};
+  }
+}
+
+function lsKey(accountId: string): string {
+  return `${LS_KEY_PREFIX}${accountId}`;
+}
+
+function saveJar(jar: InMemoryCookieJar, accountId: string) {
+  try {
+    const data = {
+      cookies: jar.cookies,
+      exp: decodeJwt(jar.cookies["token"] ?? "").exp ?? null,
+    };
+    localStorage.setItem(lsKey(accountId), JSON.stringify(data));
   } catch {
     // localStorage lleno o deshabilitado — ignorar
   }
 }
 
-function loadJar(jar: InMemoryCookieJar) {
+function loadJar(jar: InMemoryCookieJar, accountId: string) {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      if (parsed && typeof parsed === "object") {
-        jar.cookies = parsed;
-      }
+    const raw = localStorage.getItem(lsKey(accountId));
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { cookies?: Record<string, string> };
+    if (parsed.cookies && typeof parsed.cookies === "object") {
+      jar.cookies = parsed.cookies;
     }
   } catch {
-    localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(lsKey(accountId));
   }
 }
 
-function clearJar() {
+function clearJar(accountId: string) {
   try {
-    localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(lsKey(accountId));
   } catch {
     // ignorar
   }
 }
 
-const _globalJar = new InMemoryCookieJar();
+// ── Singleton: una sesión por pestaña del browser, una cuenta activa a la vez ──
+let _globalJar = new InMemoryCookieJar();
+let _activeAccountId: string | null = null;
 let _loginPromise: Promise<boolean> | null = null;
+let _autoRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Hidratar desde localStorage en el módulo (antes de cualquier render)
-loadJar(_globalJar);
+// Estado reactivo
+const isLoggedIn = ref(_globalJar.hasSession());
+const sessionExpiresAt = ref<number | null>(null);
 
 export function usePromoritzSession() {
   const { config } = useConfiguracion();
@@ -65,8 +88,6 @@ export function usePromoritzSession() {
   const promoritzLotesHoy = ref(0);
   const promoritzLimite = ref(12);
   const profileLoading = ref(false);
-
-  const isLoggedIn = ref(_globalJar.hasSession());
 
   function updateIsLoggedIn() {
     isLoggedIn.value = _globalJar.hasSession();
@@ -82,28 +103,87 @@ export function usePromoritzSession() {
     }
   }
 
-  // Si ya había sesión en localStorage, poblar userData
-  if (isLoggedIn.value) {
-    userData.value = parseUserCookie();
+  function setupAutoRefresh() {
+    if (_autoRefreshTimer) {
+      clearTimeout(_autoRefreshTimer);
+      _autoRefreshTimer = null;
+    }
+    const exp = decodeJwt(_globalJar.cookies["token"] ?? "").exp;
+    if (!exp) {
+      sessionExpiresAt.value = null;
+      return;
+    }
+    const expiresAtMs = exp * 1000;
+    sessionExpiresAt.value = expiresAtMs;
+    const msUntilExp = expiresAtMs - Date.now();
+    // Auto-refresh 1 minuto antes de expirar
+    const refreshIn = Math.max(0, msUntilExp - 60_000);
+    _autoRefreshTimer = setTimeout(() => {
+      // Silencioso, sin UI de error
+      login().catch(() => {
+        // Si falla el auto-refresh, no hacer nada — el próximo inyectar
+        // disparará auto-relogin reactivo
+      });
+    }, refreshIn);
+  }
+
+  // Reaccionar al cambio de cuenta activa: cargar/limpiar sesión
+  watch(
+    () => config.value?.activeAccountId,
+    (newId) => {
+      if (_activeAccountId && _activeAccountId !== newId) {
+        // Guardar sesión de la cuenta anterior antes de cambiar
+        saveJar(_globalJar, _activeAccountId);
+        clearJar(_activeAccountId);
+      }
+      if (newId) {
+        // Cargar sesión de la nueva cuenta
+        _activeAccountId = newId;
+        loadJar(_globalJar, newId);
+        updateIsLoggedIn();
+        if (_globalJar.hasSession()) {
+          userData.value = parseUserCookie();
+          setupAutoRefresh();
+        } else {
+          userData.value = null;
+          sessionExpiresAt.value = null;
+        }
+      }
+    },
+    { immediate: true },
+  );
+
+  // Cargar sesión inicial de la cuenta activa al montar
+  if (config.value?.activeAccountId && !_activeAccountId) {
+    _activeAccountId = config.value.activeAccountId;
+    loadJar(_globalJar, _activeAccountId);
+    updateIsLoggedIn();
+    if (_globalJar.hasSession()) {
+      userData.value = parseUserCookie();
+      setupAutoRefresh();
+    }
   }
 
   async function login(): Promise<boolean> {
     if (_loginPromise) return _loginPromise;
     error.value = null;
     loading.value = true;
+    const accountId = config.value?.activeAccountId;
     const email = config.value?.email;
-    if (!email) {
-      error.value = "Email no configurado. Ve a Configuración.";
+    if (!accountId || !email) {
+      error.value = "Cuenta no configurada. Ve a Configuración.";
       loading.value = false;
       return false;
     }
+    _activeAccountId = accountId;
     _loginPromise = (async () => {
       const injector = new HttpInjector({ email, cookieJar: _globalJar });
       const ok = await injector.login();
       updateIsLoggedIn();
       if (ok) {
         userData.value = parseUserCookie();
-        saveJar(_globalJar);
+        saveJar(_globalJar, accountId);
+        setupAutoRefresh();
         error.value = null;
       } else {
         error.value = "Login falló contra promoritz.";
@@ -117,12 +197,17 @@ export function usePromoritzSession() {
   }
 
   function logout() {
+    if (_activeAccountId) clearJar(_activeAccountId);
     _globalJar.clear();
-    clearJar();
     updateIsLoggedIn();
     userData.value = null;
+    sessionExpiresAt.value = null;
     promoritzLotesHoy.value = 0;
     error.value = null;
+    if (_autoRefreshTimer) {
+      clearTimeout(_autoRefreshTimer);
+      _autoRefreshTimer = null;
+    }
   }
 
   async function fetchProfile() {
@@ -153,6 +238,7 @@ export function usePromoritzSession() {
     promoritzLotesHoy,
     promoritzLimite,
     profileLoading,
+    sessionExpiresAt,
     login,
     logout,
     fetchProfile,

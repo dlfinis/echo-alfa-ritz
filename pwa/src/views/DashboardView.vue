@@ -286,6 +286,16 @@ const todosSeleccionados = computed(() =>
   pool.lotes.value.length > 0 && selectedIds.value.size === pool.lotes.value.length,
 );
 
+// Cargar contadores al montar y al volver a la pestaña
+onMounted(() => {
+  pool.loadBatchCounts();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      pool.loadBatchCounts();
+    }
+  });
+});
+
 function toggleSelection(id: string) {
   const s = new Set(selectedIds.value);
   if (s.has(id)) s.delete(id); else s.add(id);

@@ -8,6 +8,7 @@ export interface ConfigRow {
   delay_min_segundos: number;
   delay_max_segundos: number;
   updated_at: string;
+  active_account_id: string | null;
 }
 
 // ── Singleton: evitar múltiples subscripciones Realtime al mismo canal ──
@@ -31,6 +32,7 @@ export function useConfiguracion() {
       email: row.email,
       delayMinSegundos: row.delay_min_segundos,
       delayMaxSegundos: row.delay_max_segundos,
+      activeAccountId: row.active_account_id ?? undefined,
     };
   }
 
@@ -56,6 +58,9 @@ export function useConfiguracion() {
     if (patch.email !== undefined) update.email = patch.email;
     if (patch.delayMinSegundos !== undefined) update.delay_min_segundos = patch.delayMinSegundos;
     if (patch.delayMaxSegundos !== undefined) update.delay_max_segundos = patch.delayMaxSegundos;
+    if (patch.activeAccountId !== undefined) {
+      update.active_account_id = patch.activeAccountId;
+    }
 
     const { error: e } = await sb
       .from("configuracion")
@@ -63,6 +68,11 @@ export function useConfiguracion() {
       .eq("id", _config.value.id);
     if (e) throw e;
     await refresh();
+  }
+
+  /** Set active account (id de accounts) en configuracion. */
+  async function setActiveAccount(accountId: string) {
+    await update({ activeAccountId: accountId });
   }
 
   function subscribe() {
@@ -76,5 +86,12 @@ export function useConfiguracion() {
       .subscribe();
   }
 
-  return { config: _config, loading: _loading, error: _error, refresh, update };
+  return {
+    config: _config,
+    loading: _loading,
+    error: _error,
+    refresh,
+    update,
+    setActiveAccount,
+  };
 }

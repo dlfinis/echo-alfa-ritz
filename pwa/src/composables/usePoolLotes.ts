@@ -6,6 +6,7 @@ import {
   esFormatoLoteValido,
 } from "@echo-alfa-ritz/shared";
 import { useSupabase } from "./useSupabase.js";
+import { useConfiguracion } from "./useConfiguracion.js";
 
 export interface LoteRow {
   id: string;
@@ -14,6 +15,7 @@ export interface LoteRow {
   estado: "activo" | "pagado" | "vencido" | "inactivo";
   created_at: string;
   updated_at: string;
+  account_id?: string | null;
 }
 
 /**
@@ -164,24 +166,51 @@ export function usePoolLotes() {
   const batchCount = ref<Record<string, number>>({});
   const hoyCount = ref(0);
 
+  /** Fecha local en formato YYYY-MM-DD (NO UTC). */
+  function localToday(): string {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function localTomorrow(): string {
+    const now = new Date();
+    now.setDate(now.getDate() + 1);
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   async function loadBatchCounts() {
-    const today = new Date().toISOString().slice(0, 10); // "2026-06-19"
+    const { config: cfg } = useConfiguracion();
+    const accountId = cfg.value?.activeAccountId;
+    if (!accountId) {
+      hoyCount.value = 0;
+      batchCount.value = {};
+      return;
+    }
+    const today = localToday();
+    const tomorrow = localTomorrow();
     const { data, error: e } = await sb
       .from("logs_inscripcion")
       .select("numero, resultado, fecha")
-      .eq("resultado", "success");
+      .eq("resultado", "success")
+      .eq("account_id", accountId)
+      .gte("fecha", `${today}T00:00:00.000Z`)
+      .lt("fecha", `${tomorrow}T00:00:00.000Z`);
     if (e) {
       console.warn("Error cargando batchCount:", e.message);
       return;
     }
     const map: Record<string, number> = {};
-    let hoy = 0;
     for (const row of data ?? []) {
       map[row.numero] = (map[row.numero] ?? 0) + 1;
-      if (row.fecha?.startsWith(today)) hoy++;
     }
     batchCount.value = map;
-    hoyCount.value = hoy;
+    hoyCount.value = (data ?? []).length;
   }
 
   function toDomain(row: LoteRow): Lote {

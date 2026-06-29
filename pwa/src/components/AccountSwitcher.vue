@@ -34,17 +34,21 @@
       <div v-if="activeAccount" class="p-2 border-b bg-gray-50 flex gap-2">
         <button
           v-if="!session.isLoggedIn"
-          class="flex-1 bg-blue-600 text-white text-sm font-semibold px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+          type="button"
+          class="flex-1 bg-blue-600 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           :disabled="isLoading"
           @click="onLogin"
+          @mousedown.stop
         >
           <i class="pi pi-sign-in text-xs" />
           {{ isLoading ? "…" : "Login" }}
         </button>
         <button
           v-else
-          class="flex-1 bg-red-500 text-white text-sm font-semibold px-3 py-1.5 rounded hover:bg-red-600"
+          type="button"
+          class="flex-1 bg-red-500 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-red-600 cursor-pointer"
           @click="onLogout"
+          @mousedown.stop
         >
           <i class="pi pi-sign-out text-xs" />
           Cerrar sesión
@@ -154,8 +158,10 @@ function onClickOutside(e: MouseEvent) {
 }
 
 async function onLogin() {
+  console.log("[AccountSwitcher] onLogin clicked");
   open.value = false;
   await session.login();
+  console.log("[AccountSwitcher] onLogin done, isLoggedIn:", session.isLoggedIn.value);
 }
 
 async function onLogout() {
@@ -167,7 +173,6 @@ async function onLogout() {
   );
   // Forzar re-render del dropdown
   await new Promise((r) => setTimeout(r, 100));
-  // No cerramos el dropdown para que el user pueda ver que ya está deslogueado
 }
 
 async function onSwitch(accountId: string) {

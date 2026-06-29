@@ -6,7 +6,7 @@
       :title="titleText"
       @click="open = !open"
     >
-      <i :class="session.isLoggedIn.value ? 'pi pi-user text-base' : 'pi pi-lock text-base'" />
+      <i :class="session.isLoggedIn ? 'pi pi-user text-base' : 'pi pi-lock text-base'" />
       <span class="hidden md:inline truncate max-w-[160px]">{{ mainLabel }}</span>
       <i class="pi pi-angle-down text-xs" />
     </button>
@@ -20,10 +20,10 @@
       <div v-if="activeAccount" class="p-3 border-b bg-blue-50">
         <p class="text-xs font-semibold text-blue-600 uppercase">Cuenta activa</p>
         <p class="font-mono text-sm truncate mt-1">{{ activeAccount.email }}</p>
-        <p v-if="session.isLoggedIn.value && session.userData.value" class="text-xs text-gray-600 mt-1">
-          Sesión: {{ session.userData.value.name }} {{ session.userData.value.lastname }}
+        <p v-if="session.isLoggedIn && userName" class="text-xs text-gray-600 mt-1">
+          Sesión: {{ userName }}
         </p>
-        <p v-else-if="!session.isLoggedIn.value" class="text-xs text-red-600 mt-1">
+        <p v-else-if="!session.isLoggedIn" class="text-xs text-red-600 mt-1">
           ⚠️ Sin sesión activa
         </p>
       </div>
@@ -31,13 +31,13 @@
       <!-- Acción de login/logout de la cuenta activa -->
       <div v-if="activeAccount" class="p-2 border-b bg-gray-50 flex gap-2">
         <button
-          v-if="!session.isLoggedIn.value"
+          v-if="!session.isLoggedIn"
           class="flex-1 bg-blue-600 text-white text-sm font-semibold px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
-          :disabled="session.loading.value"
+          :disabled="isLoading"
           @click="onLogin"
         >
           <i class="pi pi-sign-in text-xs" />
-          {{ session.loading.value ? "…" : "Login" }}
+          {{ isLoading ? "…" : "Login" }}
         </button>
         <button
           v-else
@@ -90,10 +90,10 @@
 
       <!-- Error -->
       <div
-        v-if="session.error.value && !session.isLoggedIn.value"
+        v-if="session.error && !session.isLoggedIn"
         class="p-2 bg-red-50 text-xs text-red-700"
       >
-        {{ session.error.value }}
+        {{ session.error }}
       </div>
     </div>
   </div>
@@ -144,6 +144,13 @@ const expiresInMinValue = computed<number | null>(() => {
   if (ms <= 0) return 0;
   return Math.ceil(ms / 60_000);
 });
+
+const userName = computed(() => {
+  const u = session.userData.value;
+  return u ? `${u.name} ${u.lastname}` : null;
+});
+
+const isLoading = computed(() => session.loading.value);
 
 function onClickOutside(e: MouseEvent) {
   if (!open.value) return;

@@ -158,7 +158,7 @@ export function useRotationRunner() {
         email: config.value!.email!,
         cookieJar: jarActual,
       });
-      const logWriter = new SupabaseLogWriter(sb);
+      const logWriter = new SupabaseLogWriter(sb, config.value!.activeAccountId ?? null);
       const maxCount = Math.min(Math.max(options?.cantidad ?? 12, 1), 12);
       _orchestrator = new ExecutionOrchestrator({
         rotationRule: new RotacionCiclicaRule(),

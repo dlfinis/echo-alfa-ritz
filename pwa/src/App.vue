@@ -29,10 +29,10 @@
           <AccountSwitcher />
 
           <span
-            v-if="session.error.value && !session.isLoggedIn.value"
+            v-if="session.error && !session.isLoggedIn"
             class="text-red-200 text-xs hidden md:inline"
           >
-            {{ session.error.value }}
+            {{ session.error }}
           </span>
         </nav>
       </div>

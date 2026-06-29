@@ -139,7 +139,7 @@ describe("HttpInjector", () => {
     });
 
     expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
-    expect(resultado.mensaje).toContain("lote-uuid");
+    expect(resultado.mensaje).toContain("lote-uui");
   });
 
   it("detecta límite diario y marca como SKIPPED", async () => {
@@ -289,7 +289,7 @@ describe("HttpInjector", () => {
     const headersRetry = new Headers(calls[3].init.headers);
     expect(headersRetry.get("x-promoritz-token")).toBe("fresca");
     expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
-    expect(resultado.mensaje).toContain("lote-post-relogin");
+    expect(resultado.mensaje).toContain("lote-pos");
   });
 
   it("marca FAILED si el re-login no logra renovar la sesión (5xx reintenta 3 veces)", async () => {

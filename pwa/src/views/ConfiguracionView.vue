@@ -172,9 +172,10 @@ async function onAdd() {
   addError.value = null;
   try {
     const acc = await accounts.addAccount(newEmail.value);
-    // Si es la primera cuenta, activarla
+    // Si es la primera cuenta, activarla y actualizar el email
     if (accounts.accounts.value.length === 1) {
-      await cfg.setActiveAccount(acc.id);
+      await cfg.update({ activeAccountId: acc.id, email: acc.email });
+      emailAnterior = acc.email;
     }
     newEmail.value = "";
   } catch (e) {
@@ -185,11 +186,23 @@ async function onAdd() {
 }
 
 async function onActivate(accountId: string) {
-  await cfg.setActiveAccount(accountId);
-  // Si no hay sesión guardada, forzar login
-  if (!session.isLoggedIn.value) {
-    await session.login();
+  // Buscar el email de la cuenta a activar. Sin esto, login() usa el
+  // email viejo de configuracion y promoritz devuelve el mismo token
+  // (porque la cuenta activa sigue siendo la misma para promoritz).
+  const acc = accounts.getById(accountId);
+  if (!acc) return;
+
+  // Hacer logout de la cuenta anterior ANTES de cambiar
+  if (session.isLoggedIn.value) {
+    session.logout();
   }
+
+  // Actualizar configuracion: active_account_id + email de la nueva cuenta
+  await cfg.update({ activeAccountId: accountId, email: acc.email });
+  emailAnterior = acc.email;
+
+  // Forzar login con la nueva cuenta
+  await session.login();
 }
 
 async function onRemove(accountId: string, email: string) {

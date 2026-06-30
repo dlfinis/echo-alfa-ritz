@@ -31,29 +31,29 @@
       </div>
 
       <!-- Acción de login/logout de la cuenta activa -->
-      <div v-if="activeAccount" class="p-2 border-b bg-gray-50 flex gap-2">
+      <form
+        v-if="activeAccount"
+        class="p-2 border-b bg-gray-50 flex gap-2"
+        @submit.prevent="onFormSubmit"
+      >
         <button
           v-if="!session.isLoggedIn"
-          ref="loginButtonRef"
-          type="button"
+          type="submit"
           class="flex-1 bg-blue-600 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           :disabled="isLoading"
-          @click="onLogin"
         >
           <i class="pi pi-sign-in text-xs" />
           {{ isLoading ? "…" : "Login" }}
         </button>
         <button
           v-else
-          ref="logoutButtonRef"
-          type="button"
+          type="submit"
           class="flex-1 bg-red-500 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-red-600 cursor-pointer"
-          @click="onLogout"
         >
           <i class="pi pi-sign-out text-xs" />
           Cerrar sesión
         </button>
-      </div>
+      </form>
 
       <!-- Lista de cuentas para switchear -->
       <div class="p-3 border-b">
@@ -118,7 +118,6 @@ const session = usePromoritzSession();
 
 const open = ref(false);
 const containerRef = ref<HTMLElement | null>(null);
-const logoutButtonRef = ref<HTMLButtonElement | null>(null);
 
 const accountList = computed<Account[]>(() => accountsApi.accounts.value);
 const activeAccountId = computed(() => cfg.config.value?.activeAccountId);
@@ -170,22 +169,28 @@ function onClickOutside(e: MouseEvent) {
   }
 }
 
+async function onFormSubmit(e: Event) {
+  console.log("[AccountSwitcher] onFormSubmit called, isLoggedIn:", session.isLoggedIn.value);
+  // El <form @submit.prevent="onFormSubmit"> se dispara con click
+  // en cualquiera de los dos botones (login o logout). Decidimos
+  // según el estado de la sesión.
+  e.preventDefault();
+  if (session.isLoggedIn.value) {
+    await onLogout();
+  } else {
+    await onLogin();
+  }
+}
+
 async function onLogin() {
-  console.log("[AccountSwitcher] onLogin clicked");
+  console.log("[AccountSwitcher] onLogin");
   open.value = false;
   await session.login();
-  console.log("[AccountSwitcher] onLogin done, isLoggedIn:", session.isLoggedIn.value);
 }
 
 async function onLogout() {
-  console.log("[AccountSwitcher] onLogout clicked, calling session.logout()");
+  console.log("[AccountSwitcher] onLogout");
   await session.logout();
-  console.log(
-    "[AccountSwitcher] session.logout() done, isLoggedIn:",
-    session.isLoggedIn.value,
-  );
-  // Forzar re-render del dropdown
-  await new Promise((r) => setTimeout(r, 100));
 }
 
 async function onSwitch(accountId: string) {
@@ -208,16 +213,8 @@ function onAddNew() {
 
 onMounted(() => {
   document.addEventListener("click", onClickOutside);
-  // Backup click handler para el botón de logout (por si el @click de Vue
-  // no se dispara por algún evento de z-index, overlap, etc.)
-  if (logoutButtonRef.value) {
-    logoutButtonRef.value.addEventListener("click", onLogout);
-  }
 });
 onUnmounted(() => {
   document.removeEventListener("click", onClickOutside);
-  if (logoutButtonRef.value) {
-    logoutButtonRef.value.removeEventListener("click", onLogout);
-  }
 });
 </script>

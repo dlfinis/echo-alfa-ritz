@@ -292,6 +292,7 @@ import { ref, computed, onMounted } from "vue";
 import { usePoolLotes, type LoteRow } from "../composables/usePoolLotes.js";
 import { useRotationRunner } from "../composables/useRotationRunner.js";
 import { usePromoritzSession } from "../composables/usePromoritzSession.js";
+import { useConfiguracion } from "../composables/useConfiguracion.js";
 import { useHistorial } from "../composables/useHistorial.js";
 import { useAccounts } from "../composables/useAccounts.js";
 import { useBatchRotation } from "../composables/useBatchRotation.js";
@@ -304,6 +305,7 @@ import {
 const pool = usePoolLotes();
 const runner = useRotationRunner();
 const session = usePromoritzSession();
+const cfg = useConfiguracion();
 const historial = useHistorial();
 const accounts = useAccounts();
 const batch = useBatchRotation();
@@ -385,11 +387,31 @@ function toggleBatchAccount(id: string) {
 
 async function ejecutarBatch() {
   showBatchConfirm.value = false;
+  // Guardar la cuenta activa antes del batch para restaurarla después
+  const previousAccountId = cfg.config.value?.activeAccountId;
+
   await batch.executeBatch({
     accountIds: batchSelectedAccounts.value,
     cantidadPorCuenta: batchCantidad.value,
     fastMode: !usarDelayConfig.value,
   });
+
+  // Restaurar la cuenta activa original. Sin esto, el contador de
+  // hoyCount queda apuntando a la ÚLTIMA cuenta del batch (session.login
+  // de la última iteración deja esa cuenta como activa). Al restaurar
+  // la cuenta original, loadBatchCounts cuenta los lotes de esa cuenta.
+  if (previousAccountId && previousAccountId !== cfg.config.value?.activeAccountId) {
+    const restored = await cfg.setActiveAccount(previousAccountId);
+    if (restored) {
+      // Si la cuenta restaurada tiene sesión en localStorage, cargarla.
+      // Si no, el usuario verá "Sin sesión activa" y deberá hacer login.
+      if (!session.isLoggedIn.value) {
+        // Intentar login silencioso (si el token guardado todavía sirve)
+        await session.login().catch(() => {});
+      }
+    }
+  }
+
   await pool.loadBatchCounts();
 
   const b = batch.batchState.value;

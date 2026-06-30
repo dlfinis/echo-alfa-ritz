@@ -1,8 +1,8 @@
 import { ref } from "vue";
 import { useAccounts } from "./useAccounts.js";
+import { useConfiguracion } from "./useConfiguracion.js";
 import { usePromoritzSession } from "./usePromoritzSession.js";
 import { useRotationRunner } from "./useRotationRunner.js";
-import { useSupabase } from "./useSupabase.js";
 
 export interface BatchRunResult {
   success: number;
@@ -25,8 +25,8 @@ export interface BatchExecuteState {
 let _canceled = false;
 
 export function useBatchRotation() {
-  const sb = useSupabase();
   const accountsApi = useAccounts();
+  const cfg = useConfiguracion();
   const session = usePromoritzSession();
   const runner = useRotationRunner();
 
@@ -82,20 +82,20 @@ export function useBatchRotation() {
         }
         batchState.value.currentAccountEmail = acc.email;
 
-        // 1. Cambiar a esta cuenta: setear active_account_id + email en configuracion
-        //    (setActiveAccount en useConfiguracion ya es atómico).
-        const { data: accRow } = await sb
-          .from("accounts")
-          .select("email")
-          .eq("id", accountId)
-          .maybeSingle();
-        if (!accRow) {
+        // 1. Activar la cuenta en configuracion. CRÍTICO: sin esto,
+        //    session.login() usa el email de la cuenta ANTERIOR y te devuelve
+        //    el mismo token (el bug que viste).
+        //    setActiveAccount actualiza active_account_id + email en DB,
+        //    refresh() recarga config.value, el watch de usePromoritzSession
+        //    limpia el jar y carga la sesión de la nueva cuenta (si existe).
+        const switched = await cfg.setActiveAccount(accountId);
+        if (!switched) {
           batchState.value.totalFailed++;
           batchState.value.accountsDone++;
           continue;
         }
 
-        // 2. Login fresh (el watch de usePromoritzSession carga sesión de la cuenta activa)
+        // 2. Login fresh. Ahora config.value.email tiene el email NUEVO.
         const logged = await session.login();
         if (!logged) {
           batchState.value.totalFailed++;

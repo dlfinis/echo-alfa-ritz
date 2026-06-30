@@ -515,9 +515,6 @@ async function borrarLote(id: string, numero: string) {
   } catch {}
 }
 
-// ── Init ──
-onMounted(() => { pool.loadBatchCounts(); });
-
 // ── Helpers ──
 function formatFecha(iso: string) {
   return new Date(iso).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", second: "2-digit" });

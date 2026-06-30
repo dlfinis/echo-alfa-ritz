@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import type { Lote } from "@echo-alfa-ritz/shared";
 import {
   LOTE_ESTADO,
@@ -65,8 +65,23 @@ export function usePoolLotes() {
   onMounted(async () => {
     await refresh();
     subscribe();
+    // Cargar contadores iniciales. loadBatchCounts usa config.activeAccountId
+    // que puede llegar DESPUÉS de onMounted (carga async de Supabase). El
+    // watch de abajo se encarga de actualizar cuando config cargue.
+    await loadBatchCounts();
   });
   onUnmounted(unsubscribe);
+
+  // Reaccionar a cambios en la cuenta activa para actualizar contadores.
+  // Sin esto, si config todavía no cargó en onMounted, hoyCount queda en 0
+  // para siempre hasta que el usuario ejecute alguna acción manual.
+  const { config: _cfg } = useConfiguracion();
+  watch(
+    () => _cfg.value?.activeAccountId,
+    async () => {
+      await loadBatchCounts();
+    },
+  );
 
   async function addLote(numero: string, producto: string) {
     const { error: e } = await sb

@@ -199,11 +199,19 @@ async function onSwitch(accountId: string) {
     return;
   }
   open.value = false;
-  // Cambiar cuenta activa en DB. El watch de usePromoritzSession:
-  //   1. Guarda sesión de cuenta anterior
-  //   2. Carga sesión de la nueva cuenta (si existe)
-  //   3. Si no hay sesión, isLoggedIn = false → user debe hacer login
-  await cfg.setActiveAccount(accountId);
+  // Logout de la cuenta anterior ANTES de cambiar (no mezclar sesiones)
+  if (session.isLoggedIn.value) {
+    session.logout();
+  }
+  // setActiveAccount actualiza active_account_id + email en una
+  // operación atómica. Si la cuenta no existe, no hace nada.
+  const result = await cfg.setActiveAccount(accountId);
+  if (!result) return;
+  // El watch de usePromoritzSession carga la sesión de la nueva cuenta
+  // (si existe en localStorage). Si no, hay que re-loguear.
+  if (!session.isLoggedIn.value) {
+    await session.login();
+  }
 }
 
 function onAddNew() {

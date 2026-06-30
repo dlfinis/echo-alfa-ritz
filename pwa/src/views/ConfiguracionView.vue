@@ -172,15 +172,14 @@ async function onAdd() {
   addError.value = null;
   try {
     const acc = await accounts.addAccount(newEmail.value);
-    // Si no hay cuenta activa, o la activa ya no existe en accounts,
-    // activar la nueva y actualizar el email.
+    // Si no hay activa válida, activar la nueva (también actualiza email)
     const activeId = cfg.config.value?.activeAccountId;
     const activeExists = activeId
       ? accounts.accounts.value.some((a) => a.id === activeId)
       : false;
     if (!activeExists) {
-      await cfg.update({ activeAccountId: acc.id, email: acc.email });
-      emailAnterior = acc.email;
+      const result = await cfg.setActiveAccount(acc.id);
+      if (result) emailAnterior = result.email;
     }
     newEmail.value = "";
   } catch (e) {
@@ -191,20 +190,16 @@ async function onAdd() {
 }
 
 async function onActivate(accountId: string) {
-  // Buscar el email de la cuenta a activar. Sin esto, login() usa el
-  // email viejo de configuracion y promoritz devuelve el mismo token
-  // (porque la cuenta activa sigue siendo la misma para promoritz).
-  const acc = accounts.getById(accountId);
-  if (!acc) return;
-
   // Hacer logout de la cuenta anterior ANTES de cambiar
   if (session.isLoggedIn.value) {
     session.logout();
   }
 
-  // Actualizar configuracion: active_account_id + email de la nueva cuenta
-  await cfg.update({ activeAccountId: accountId, email: acc.email });
-  emailAnterior = acc.email;
+  // setActiveAccount ahora también actualiza el email en una sola
+  // operación atómica. Devuelve null si la cuenta no existe.
+  const result = await cfg.setActiveAccount(accountId);
+  if (!result) return;
+  emailAnterior = result.email;
 
   // Forzar login con la nueva cuenta
   await session.login();
@@ -218,12 +213,13 @@ async function onRemove(accountId: string, email: string) {
   )
     return;
   try {
-    // Si es la cuenta activa, limpiar el estado de configuracion y la sesión
-    // antes de borrar, para no dejar emails huérfanos apuntando a cuentas
-    // inexistentes (que causarían login en promoritz como un usuario distinto).
-    if (cfg.config.value?.activeAccountId === accountId) {
+    // SIEMPRE limpiar el email y active_account_id si la cuenta borrada
+    // coincide con la activa. También si el email de configuracion
+    // coincide con el email borrado (independiente de cuál es la activa).
+    const current = cfg.config.value;
+    if (current?.activeAccountId === accountId || current?.email === email) {
       session.logout();
-      await cfg.update({ activeAccountId: null, email: "" });
+      await cfg.clearActiveAccount();
       emailAnterior = "";
     }
     await accounts.removeAccount(accountId);

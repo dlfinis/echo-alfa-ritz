@@ -45,14 +45,24 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from "vue";
 import CookieLogo from "./components/CookieLogo.vue";
 import AccountSwitcher from "./components/AccountSwitcher.vue";
 // Inicializar el singleton de accounts (suscripción Realtime)
 import { useAccounts } from "./composables/useAccounts.js";
+import { useConfiguracion } from "./composables/useConfiguracion.js";
 import { usePromoritzSession } from "./composables/usePromoritzSession.js";
 
 useAccounts();
+const cfg = useConfiguracion();
 const session = usePromoritzSession();
+
+// Al cargar, validar que el email de configuracion corresponde a la cuenta
+// activa (puede quedar desincronizado si se borra una cuenta via DB directa
+// o si hubo un bug anterior). Si no, corregir.
+onMounted(async () => {
+  await cfg.validateAndFixEmail();
+});
 </script>
 
 <style scoped></style>

@@ -71,9 +71,67 @@ export function useConfiguracion() {
     await refresh();
   }
 
-  /** Set active account (id de accounts) en configuracion. */
-  async function setActiveAccount(accountId: string) {
-    await update({ activeAccountId: accountId });
+  /**
+   * Activa una cuenta: setea active_account_id Y el email correspondiente
+   * en una sola operación atómica. Si la cuenta no existe, NO hace nada
+   * (devuelve null) para evitar emails huérfanos.
+   */
+  async function setActiveAccount(
+    accountId: string,
+  ): Promise<{ email: string } | null> {
+    const { data: acc, error: e } = await sb
+      .from("accounts")
+      .select("id, email")
+      .eq("id", accountId)
+      .maybeSingle();
+    if (e) throw e;
+    if (!acc) return null;
+    await update({ activeAccountId: accountId, email: acc.email });
+    return { email: acc.email };
+  }
+
+  /**
+   * Limpia el estado de cuenta activa (active_account_id y email).
+   * Usar cuando se borra la cuenta activa o cuando el email no corresponde
+   * a ninguna cuenta activa (corrupto).
+   */
+  async function clearActiveAccount(): Promise<void> {
+    await update({ activeAccountId: null, email: "" });
+  }
+
+  /**
+   * Verifica que el email de configuracion.matchee el email del
+   * active_account_id. Si no, lo corrige. Útil al montar la app o
+   * después de cambios en accounts.
+   */
+  async function validateAndFixEmail(): Promise<void> {
+    if (!_config.value) return;
+    const id = _config.value.activeAccountId;
+    if (!id) {
+      // No hay activa. Si hay email, limpiarlo.
+      if (_config.value.email) {
+        await update({ email: "" });
+      }
+      return;
+    }
+    const { data: acc, error: e } = await sb
+      .from("accounts")
+      .select("email")
+      .eq("id", id)
+      .maybeSingle();
+    if (e) {
+      console.warn("validateAndFixEmail error:", e);
+      return;
+    }
+    if (!acc) {
+      // La activa no existe. Limpiar.
+      await clearActiveAccount();
+      return;
+    }
+    if (acc.email !== _config.value.email) {
+      // El email está desincronizado. Corregir.
+      await update({ email: acc.email });
+    }
   }
 
   function subscribe() {
@@ -94,5 +152,7 @@ export function useConfiguracion() {
     refresh,
     update,
     setActiveAccount,
+    clearActiveAccount,
+    validateAndFixEmail,
   };
 }

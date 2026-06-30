@@ -18,15 +18,29 @@
       v-if="open"
       class="absolute right-0 mt-2 w-80 bg-white text-gray-800 rounded-lg shadow-lg border z-50 overflow-hidden"
     >
-      <!-- Info de la cuenta activa -->
-      <div v-if="activeAccount" class="p-3 border-b bg-blue-50">
+      <!-- Info de la cuenta activa: solo visible cuando hay sesión real -->
+      <div v-if="session.isLoggedIn && activeAccount" class="p-3 border-b bg-blue-50">
         <p class="text-xs font-semibold text-blue-600 uppercase">Cuenta activa</p>
         <p class="font-mono text-sm truncate mt-1">{{ activeAccount.email }}</p>
-        <p v-if="session.isLoggedIn && userName" class="text-xs text-gray-600 mt-1">
+        <p v-if="userName" class="text-xs text-gray-600 mt-1">
           Sesión: {{ userName }}
         </p>
-        <p v-else-if="!session.isLoggedIn" class="text-xs text-red-600 mt-1">
-          ⚠️ Sin sesión activa
+      </div>
+      <!-- Cuando hay cuenta activa pero sin sesión, mostrar solo el warning -->
+      <div
+        v-else-if="activeAccount && !session.isLoggedIn"
+        class="p-3 border-b bg-yellow-50"
+      >
+        <p class="text-xs font-semibold text-yellow-700 uppercase">⚠️ Sin sesión activa</p>
+        <p class="text-xs text-gray-600 mt-1">
+          Hay una cuenta configurada pero no hay sesión. Hacé click en Login abajo.
+        </p>
+      </div>
+      <!-- Sin cuenta configurada -->
+      <div v-else class="p-3 border-b bg-gray-50">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Sin cuenta configurada</p>
+        <p class="text-xs text-gray-600 mt-1">
+          Agregá una cuenta en Configuración para empezar.
         </p>
       </div>
 
@@ -137,14 +151,13 @@ const titleText = computed(() => {
 });
 
 // Label principal: nombre del user de promoritz si está logueado,
-// email de la cuenta activa si hay activa pero sin sesión, o
-// "Sin cuenta" si no hay nada.
+// "Sin cuenta" si no hay sesión real. Nunca mostramos el email acá
+// (solo cuando hay sesión, lo muestra el dropdown con la info completa).
 const mainLabel = computed(() => {
-  if (session.isLoggedIn.value && session.userData.value) {
-    return session.userData.value.name || "";
+  if (session.isLoggedIn.value) {
+    return session.userData.value?.name || "";
   }
-  if (!activeAccount.value) return "Sin cuenta";
-  return activeAccount.value.email;
+  return "Sin cuenta";
 });
 
 const expiresInMinValue = computed<number | null>(() => {

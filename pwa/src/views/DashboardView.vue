@@ -70,7 +70,7 @@
       </div>
     </div>
 
-    <!-- Running banner -->
+    <!-- Running banner (single account) -->
     <div v-if="runner.state.value.running" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
       <div class="flex items-start justify-between">
         <div>
@@ -78,6 +78,22 @@
           <p>{{ runner.state.value.current }} / {{ cantidadAEnviar }} — ✅ {{ runner.state.value.success }} · ❌ {{ runner.state.value.failed }} · ⏭️ {{ runner.state.value.skipped }}</p>
         </div>
         <button class="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700 transition" @click="runner.cancel()">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Running banner (batch multi-cuenta) -->
+    <div v-if="batch.batchState.value.running" class="bg-green-50 border border-green-300 rounded-lg p-4 mb-4">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="font-semibold">Ejecutando batch ({{ batch.batchState.value.accountsDone }}/{{ batch.batchState.value.accountsTotal }} cuentas)</p>
+          <p class="text-sm">
+            ✅ {{ batch.batchState.value.totalSuccess }} · ❌ {{ batch.batchState.value.totalFailed }} · ⏭️ {{ batch.batchState.value.totalSkipped }}
+          </p>
+          <p v-if="batch.batchState.value.currentAccountEmail" class="text-xs text-gray-500 mt-1">
+            Cuenta: {{ batch.batchState.value.currentAccountEmail }}
+          </p>
+        </div>
+        <button class="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold hover:bg-red-700 transition" @click="batch.cancel()">Cancelar</button>
       </div>
     </div>
 
@@ -200,7 +216,7 @@
       </div>
     </div>
 
-    <!-- Botón ejecutar -->
+    <!-- Botón ejecutar (single account) -->
     <div class="flex flex-col items-center gap-2">
       <button
         class="bg-primary text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-primary/90 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -210,7 +226,63 @@
         <span class="text-2xl">🍪</span>
         {{ runner.state.value.running ? "Horneando…" : "Hornear Galletas" }}
       </button>
+
+      <!-- Botón batch (multi-cuenta) -->
+      <button
+        v-if="accounts.accounts.value.length > 1"
+        class="bg-emerald-600 text-white font-bold py-2 px-6 rounded-full text-sm hover:bg-emerald-700 transition shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        :disabled="runner.state.value.running || batch.batchState.value.running || pool.lotesActivos.value.length === 0"
+        @click="openBatchConfirm"
+      >
+        <span class="text-xl">🍪</span>
+        Hornear en {{ accounts.accounts.value.length }} cuentas
+      </button>
+
       <p v-if="pool.lotesActivos.value.length === 0" class="text-xs text-gray-500">Sin lotes activos</p>
+    </div>
+
+    <!-- ── Batch confirm dialog ── -->
+    <div v-if="showBatchConfirm" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="showBatchConfirm = false">
+      <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
+        <h3 class="text-lg font-semibold mb-1">Carga batch en {{ accounts.accounts.value.length }} cuentas</h3>
+        <p class="text-xs text-gray-500 mb-3">
+          El pool de {{ pool.lotesActivos.value.length }} lotes activos se inyectará
+          en cada cuenta seleccionada.
+        </p>
+        <div class="space-y-2 mb-4">
+          <div>
+            <label class="text-xs text-gray-600">Cantidad por cuenta (1-12):</label>
+            <input v-model.number="batchCantidad" type="number" min="1" max="12" class="w-20 border rounded px-2 py-1 ml-2 text-sm" />
+          </div>
+          <p class="text-xs font-semibold text-gray-500 uppercase">Cuentas seleccionadas ({{ batchSelectedAccounts.length }})</p>
+          <ul class="text-xs max-h-40 overflow-y-auto space-y-1 border rounded p-2">
+            <li v-for="acc in accounts.accounts.value" :key="acc.id">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  :checked="batchSelectedAccounts.includes(acc.id)"
+                  @change="toggleBatchAccount(acc.id)"
+                  class="accent-blue-600"
+                />
+                <span class="truncate">{{ acc.email }}</span>
+              </label>
+            </li>
+          </ul>
+          <p class="text-xs text-gray-500">
+            Total estimado: ~{{ pool.lotesActivos.value.length * batchSelectedAccounts.length }} inyecciones
+          </p>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button class="border px-4 py-2 rounded text-sm" @click="showBatchConfirm = false">Cancelar</button>
+          <button
+            class="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-semibold disabled:opacity-50"
+            :disabled="batchSelectedAccounts.length === 0 || batch.batchState.value.running"
+            @click="ejecutarBatch"
+          >
+            Ejecutar Batch
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -221,6 +293,8 @@ import { usePoolLotes, type LoteRow } from "../composables/usePoolLotes.js";
 import { useRotationRunner } from "../composables/useRotationRunner.js";
 import { usePromoritzSession } from "../composables/usePromoritzSession.js";
 import { useHistorial } from "../composables/useHistorial.js";
+import { useAccounts } from "../composables/useAccounts.js";
+import { useBatchRotation } from "../composables/useBatchRotation.js";
 import { getSupabaseConfigError } from "../composables/useSupabase.js";
 import {
   PRODUCTOS_VALIDOS,
@@ -231,6 +305,8 @@ const pool = usePoolLotes();
 const runner = useRotationRunner();
 const session = usePromoritzSession();
 const historial = useHistorial();
+const accounts = useAccounts();
+const batch = useBatchRotation();
 const configError = getSupabaseConfigError();
 
 const nuevoNumero = ref("");
@@ -285,6 +361,50 @@ async function ejecutarConfirmado() {
     showToast(`🍪 ¡${s.success} horneadas! (${s.failed} fallaron, ${s.skipped} saltadas)`, "partial");
   } else {
     showToast(`🍪 ¡${s.success} galletas horneadas!${s.skipped > 0 ? ` (${s.skipped} saltadas)` : ""}`, "success");
+  }
+}
+
+// ── Batch multi-cuenta ──
+const showBatchConfirm = ref(false);
+const batchCantidad = ref(10);
+const batchSelectedAccounts = ref<string[]>([]);
+
+function openBatchConfirm() {
+  batchSelectedAccounts.value = accounts.accounts.value.map((a) => a.id);
+  // Por defecto 10 por cuenta
+  batchCantidad.value = Math.min(10, pool.lotesActivos.value.length);
+  showBatchConfirm.value = true;
+}
+
+function toggleBatchAccount(id: string) {
+  const s = new Set(batchSelectedAccounts.value);
+  if (s.has(id)) s.delete(id);
+  else s.add(id);
+  batchSelectedAccounts.value = [...s];
+}
+
+async function ejecutarBatch() {
+  showBatchConfirm.value = false;
+  await batch.executeBatch({
+    accountIds: batchSelectedAccounts.value,
+    cantidadPorCuenta: batchCantidad.value,
+    fastMode: !usarDelayConfig.value,
+  });
+  await pool.loadBatchCounts();
+
+  const b = batch.batchState.value;
+  if (b.totalFailed > 0 && b.totalSuccess === 0) {
+    showToast(`😢 Batch: ${b.totalFailed} fallos en ${b.accountsDone} cuentas`, "error");
+  } else if (b.totalFailed > 0) {
+    showToast(
+      `🍪 Batch: ${b.totalSuccess} ok, ${b.totalFailed} fail, ${b.totalSkipped} skip (${b.accountsDone} cuentas)`,
+      "partial",
+    );
+  } else {
+    showToast(
+      `🍪 Batch: ${b.totalSuccess} ok${b.totalSkipped > 0 ? `, ${b.totalSkipped} skip` : ""} (${b.accountsDone} cuentas)`,
+      "success",
+    );
   }
 }
 

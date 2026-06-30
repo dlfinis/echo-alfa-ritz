@@ -136,14 +136,14 @@ const titleText = computed(() => {
   return `Click para login en ${activeAccount.value.email}`;
 });
 
-// Nombre a mostrar en el botón principal: nombre del user de promoritz si
-// está logueado, sino el email de la cuenta.
+// Label principal: nombre del user de promoritz si está logueado,
+// email de la cuenta activa si hay activa pero sin sesión, o
+// "Sin cuenta" si no hay nada.
 const mainLabel = computed(() => {
-  if (!activeAccount.value) return "Sin cuenta";
   if (session.isLoggedIn.value && session.userData.value) {
-    const first = session.userData.value.name || "";
-    return first;
+    return session.userData.value.name || "";
   }
+  if (!activeAccount.value) return "Sin cuenta";
   return activeAccount.value.email;
 });
 
@@ -170,27 +170,28 @@ function onClickOutside(e: MouseEvent) {
 }
 
 async function onFormSubmit(e: Event) {
-  console.log("[AccountSwitcher] onFormSubmit called, isLoggedIn:", session.isLoggedIn.value);
   // El <form @submit.prevent="onFormSubmit"> se dispara con click
   // en cualquiera de los dos botones (login o logout). Decidimos
   // según el estado de la sesión.
   e.preventDefault();
   if (session.isLoggedIn.value) {
-    await onLogout();
+    // Hay sesión real → cerrar
+    session.logout();
   } else {
-    await onLogin();
+    // No hay sesión → abrir dropdown y dejar que el user vea el botón Login
+    // (que se mostrará cuando recargue o cuando llegue el watch de accounts)
+    // Por seguridad, no auto-logineamos desde el botón Cerrar sin sesión.
+    open.value = false;
   }
 }
 
 async function onLogin() {
-  console.log("[AccountSwitcher] onLogin");
   open.value = false;
   await session.login();
 }
 
 async function onLogout() {
-  console.log("[AccountSwitcher] onLogout");
-  await session.logout();
+  session.logout();
 }
 
 async function onSwitch(accountId: string) {

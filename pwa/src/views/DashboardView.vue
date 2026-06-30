@@ -186,6 +186,14 @@
         <div v-for="log in ultimosLogs.slice(0, 12)" :key="log.id" class="flex gap-2 items-center">
           <span :class="badgeClass(log.resultado)">{{ log.resultado }}</span>
           <span class="font-mono w-28">{{ log.numero }}</span>
+          <span
+            v-if="log.accountEmail"
+            class="bg-blue-100 text-blue-700 px-1.5 rounded text-[10px] truncate max-w-[140px]"
+            :title="`Cuenta: ${log.accountEmail}`"
+          >
+            {{ log.accountEmail }}
+          </span>
+          <span v-else class="text-gray-400 text-[10px]">sin cuenta</span>
           <span class="text-gray-500 flex-1 truncate">{{ log.mensaje }}</span>
           <span class="text-gray-400">{{ formatFecha(log.fecha) }}</span>
         </div>
@@ -285,6 +293,16 @@ const selectedIds = ref<Set<string>>(new Set());
 const todosSeleccionados = computed(() =>
   pool.lotes.value.length > 0 && selectedIds.value.size === pool.lotes.value.length,
 );
+
+// Cargar contadores al montar y al volver a la pestaña
+onMounted(() => {
+  pool.loadBatchCounts();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      pool.loadBatchCounts();
+    }
+  });
+});
 
 function toggleSelection(id: string) {
   const s = new Set(selectedIds.value);

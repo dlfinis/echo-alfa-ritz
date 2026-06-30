@@ -66,12 +66,12 @@ describe("InMemoryCookieJar", () => {
   it("parsea Set-Cookie y los expone en toCookieHeader", () => {
     const jar = new InMemoryCookieJar();
     const headers = new Headers();
-    headers.append("set-cookie", "session=abc; Path=/; HttpOnly");
-    headers.append("set-cookie", "csrf=token; Path=/");
+    headers.append("set-cookie", "token=abc; Path=/; HttpOnly");
+    headers.append("set-cookie", "user=token; Path=/");
 
     jar.setFromResponse(headers);
-    expect(jar.cookies).toEqual({ session: "abc", csrf: "token" });
-    expect(jar.toCookieHeader()).toBe("session=abc; csrf=token");
+    expect(jar.cookies).toEqual({ token: "abc", user: "token" });
+    expect(jar.toCookieHeader()).toBe("token=abc; user=token");
     expect(jar.hasSession()).toBe(true);
   });
 
@@ -82,7 +82,7 @@ describe("InMemoryCookieJar", () => {
 
   it("clear() resetea las cookies", () => {
     const jar = new InMemoryCookieJar();
-    jar.setFromResponse(new Headers({ "set-cookie": "a=1" }));
+    jar.setFromResponse(new Headers({ "set-cookie": "token=x; Path=/" }));
     jar.clear();
     expect(jar.hasSession()).toBe(false);
   });
@@ -96,7 +96,11 @@ describe("HttpInjector", () => {
       {
         status: 200,
         setCookies: ["token=abc123; Path=/; HttpOnly"],
-        body: { ok: true },
+        body: {
+          token: "abc123",
+          id: "user-uuid",
+          email: "test@example.com",
+        },
       },
       {
         status: 200,
@@ -139,12 +143,12 @@ describe("HttpInjector", () => {
     });
 
     expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
-    expect(resultado.mensaje).toContain("lote-uuid");
+    expect(resultado.mensaje).toContain("lote-uui");
   });
 
   it("detecta límite diario y marca como SKIPPED", async () => {
     const { fetch: mockFetch } = crearFetchMock([
-      { status: 200, setCookies: ["session=xyz"] },
+      { status: 200, setCookies: ["token=xyz; Path=/"], body: { token: "xyz" } },
       {
         status: 200,
         body: { limite: true, total: 12, message: "limit" } satisfies LimiteAlcanzado,
@@ -164,7 +168,7 @@ describe("HttpInjector", () => {
 
   it("marca FAILED ante respuesta 400", async () => {
     const { fetch: mockFetch } = crearFetchMock([
-      { status: 200, setCookies: ["session=ok"] },
+      { status: 200, setCookies: ["token=ok; Path=/"], body: { token: "ok" } },
       { status: 400, body: { error: "formato inválido" } },
     ]);
 
@@ -181,7 +185,7 @@ describe("HttpInjector", () => {
 
   it("renueva sesión automáticamente si el jar está vacío", async () => {
     const { fetch: mockFetch, calls } = crearFetchMock([
-      { status: 200, setCookies: ["session=renovada"] },
+      { status: 200, setCookies: ["token=renovada; Path=/"], body: { token: "renovada" } },
       {
         status: 200,
         body: {
@@ -193,8 +197,8 @@ describe("HttpInjector", () => {
           whatsapp: true,
           isReemplazo: false,
           referredBy: null,
-          id: "x",
-          createdAt: "2026-06-18T00:00:00.000Z",
+          id: "lote-uuid",
+          createdAt: new Date().toISOString(),
         } satisfies LoteEnviado,
       },
     ]);
@@ -252,9 +256,9 @@ describe("HttpInjector", () => {
     // Plan: 1) login OK → 2) inyectar 401 (sesión expirada, mapeado por el
     // Worker desde 307 de promoritz) → 3) re-login → 4) inyectar 200 OK
     const { fetch: mockFetch, calls } = crearFetchMock([
-      { status: 200, setCookies: ["token=viejoperoinvalido"] }, // 1) login
+      { status: 200, setCookies: ["token=viejoperoinvalido"], body: { token: "viejoperoinvalido" } }, // 1) login
       { status: 401, body: { error: "session_expired" } },     // 2) inyectar
-      { status: 200, setCookies: ["token=fresca"] },            // 3) re-login
+      { status: 200, setCookies: ["token=fresca"], body: { token: "fresca" } }, // 3) re-login
       {                                                      // 4) inyectar retry
         status: 200,
         body: {
@@ -266,7 +270,7 @@ describe("HttpInjector", () => {
           whatsapp: true,
           isReemplazo: false,
           referredBy: null,
-          id: "lote-post-relogin",
+          id: "lote-pos",
           createdAt: new Date().toISOString(),
         } satisfies LoteEnviado,
       },
@@ -289,12 +293,12 @@ describe("HttpInjector", () => {
     const headersRetry = new Headers(calls[3].init.headers);
     expect(headersRetry.get("x-promoritz-token")).toBe("fresca");
     expect(resultado.status).toBe(INJECTION_RESULT.SUCCESS);
-    expect(resultado.mensaje).toContain("lote-post-relogin");
+    expect(resultado.mensaje).toContain("lote-pos");
   });
 
   it("marca FAILED si el re-login no logra renovar la sesión (5xx reintenta 3 veces)", async () => {
     const { fetch: mockFetch, calls } = crearFetchMock([
-      { status: 200, setCookies: ["token=viejo"] },
+      { status: 200, setCookies: ["token=viejo"], body: { token: "viejo" } },
       { status: 401, body: { error: "session_expired" } },
       // Login reintenta 3 veces ante 5xx (delay backoff 800ms, 1600ms)
       { status: 500, body: { error: "down" } },
@@ -316,10 +320,6 @@ describe("HttpInjector", () => {
   });
 
   it("limpia cookies stale antes de capturar las nuevas (evita 401 con sesión expirada)", async () => {
-    // Simula: el jar ya tiene cookies viejas (de localStorage o login
-    // previo expirado). Sin el clear(), hasSession() devolvería true y
-    // el body fallback se saltaría → el primer inyectar fallaría con
-    // 307 → Worker 401 porque promoritz recibe las cookies viejas.
     const mockFetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.endsWith("/api/users/login")) {

@@ -8,12 +8,23 @@
 // NOTA: No hay campos de "tarea automática" — al ser una PWA estática en
 // Cloudflare Pages, no hay cron del lado del server. La rotación la
 // dispara el usuario desde el botón "Hornear Galletas".
+//
+// NOTA: multi-cuenta — el email pertenece a una `Account`. La cuenta
+// activa se referencia por `activeAccountId` en `configuracion`.
+
+export interface Account {
+  id: string;
+  email: string;
+  displayName: string | null;
+  createdAt: string;
+}
 
 export interface ConfiguracionSistema {
   id?: string;
-  email: string; // login del usuario en promoritz
+  email: string; // email de la cuenta activa (denormalizado para queries rápidas)
   delayMinSegundos: number; // 3
   delayMaxSegundos: number; // 7
+  activeAccountId: string | null; // FK a accounts; null cuando se borra la activa
 }
 
 // ── Logs de Inscripción ──
@@ -28,6 +39,8 @@ export interface LogInscripcion {
   resultado: InjectionResultStatus;
   mensaje: string;
   estrategia: string;
+  /** ID de la cuenta que hizo el log. Null en logs legacy pre-multi-cuenta. */
+  accountId?: string | null;
 }
 
 /**

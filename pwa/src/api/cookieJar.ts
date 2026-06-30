@@ -65,8 +65,9 @@ export class InMemoryCookieJar implements CookieJar {
       .join("; ");
   }
 
+  /** True solo si hay un token y un user reales (no cookies vacías). */
   hasSession(): boolean {
-    return Object.keys(this.cookies).length > 0;
+    return !!(this.cookies["token"] && this.cookies["user"]);
   }
 
   clear(): void {

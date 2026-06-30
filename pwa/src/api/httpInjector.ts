@@ -197,7 +197,7 @@ if (!this.jar.hasSession()) {
         loteId: lote.id,
         numero: lote.numero,
         status: INJECTION_RESULT.SUCCESS,
-        mensaje: `Inyectado (id: ${(body as LoteEnviado).id})`,
+        mensaje: `Inyectado (id: ${(body as LoteEnviado).id.slice(0, 8)})`,
         timestamp: new Date().toISOString(),
       };
     }

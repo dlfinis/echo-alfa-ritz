@@ -6,7 +6,7 @@
       :title="titleText"
       @click="open = !open"
     >
-      <i :class="session.isLoggedIn ? 'pi pi-user text-base' : 'pi pi-lock text-base'" />
+      <i :class="isLoggedIn ? 'pi pi-user text-base' : 'pi pi-lock text-base'" />
       <span class="hidden md:inline truncate max-w-[160px]">
         {{ mainLabel }}
       </span>
@@ -19,7 +19,7 @@
       class="absolute right-0 mt-2 w-80 bg-white text-gray-800 rounded-lg shadow-lg border z-50 overflow-hidden"
     >
       <!-- Info de la cuenta activa: solo visible cuando hay sesión real -->
-      <div v-if="session.isLoggedIn && activeAccount" class="p-3 border-b bg-blue-50">
+      <div v-if="isLoggedIn && activeAccount" class="p-3 border-b bg-blue-50">
         <p class="text-xs font-semibold text-blue-600 uppercase">Cuenta activa</p>
         <p class="font-mono text-sm truncate mt-1">{{ activeAccount.email }}</p>
         <p v-if="userName" class="text-xs text-gray-600 mt-1">
@@ -28,7 +28,7 @@
       </div>
       <!-- Cuando hay cuenta activa pero sin sesión, mostrar solo el warning -->
       <div
-        v-else-if="activeAccount && !session.isLoggedIn"
+        v-else-if="activeAccount && !isLoggedIn"
         class="p-3 border-b bg-yellow-50"
       >
         <p class="text-xs font-semibold text-yellow-700 uppercase">⚠️ Sin sesión activa</p>
@@ -47,11 +47,11 @@
       <!-- Acción de login/logout de la cuenta activa -->
       <div
         v-if="activeAccount"
-        :key="`login-${session.isLoggedIn ? 'in' : 'out'}`"
+        :key="`login-${isLoggedIn ? 'in' : 'out'}`"
         class="p-2 border-b bg-gray-50 flex gap-2"
       >
         <button
-          v-if="!session.isLoggedIn"
+          v-if="!isLoggedIn"
           type="button"
           class="flex-1 bg-blue-600 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           :disabled="isLoading"
@@ -112,10 +112,10 @@
 
       <!-- Error -->
       <div
-        v-if="session.error && !session.isLoggedIn"
+        v-if="sessionError && !isLoggedIn"
         class="p-2 bg-red-50 text-xs text-red-700"
       >
-        {{ session.error }}
+        {{ sessionError }}
       </div>
     </div>
   </div>
@@ -131,6 +131,15 @@ import type { Account } from "@echo-alfa-ritz/shared";
 const accountsApi = useAccounts();
 const cfg = useConfiguracion();
 const session = usePromoritzSession();
+// Destructurar para que isLoggedIn, error, userData, sessionExpiresAt
+// sean top-level refs (Vue 3 los auto-unwrappea en template).
+const {
+  isLoggedIn,
+  error: sessionError,
+  userData: sessionUserData,
+  sessionExpiresAt: rawExpiresAt,
+  loading: sessionLoading,
+} = session;
 
 const open = ref(false);
 const containerRef = ref<HTMLElement | null>(null);
@@ -145,8 +154,8 @@ const activeAccount = computed<Account | null>(() => {
 
 const titleText = computed(() => {
   if (!activeAccount.value) return "Sin cuenta configurada";
-  if (session.isLoggedIn.value) {
-    const u = session.userData.value;
+  if (isLoggedIn.value) {
+    const u = sessionUserData.value;
     return `Sesión activa: ${u?.name ?? activeAccount.value.email} (${activeAccount.value.email})`;
   }
   return `Click para login en ${activeAccount.value.email}`;
@@ -156,14 +165,14 @@ const titleText = computed(() => {
 // "Sin cuenta" si no hay sesión real. Nunca mostramos el email acá
 // (solo cuando hay sesión, lo muestra el dropdown con la info completa).
 const mainLabel = computed(() => {
-  if (session.isLoggedIn.value) {
-    return session.userData.value?.name || "";
+  if (isLoggedIn.value) {
+    return sessionUserData.value?.name || "";
   }
   return "Sin cuenta";
 });
 
 const expiresInMinValue = computed<number | null>(() => {
-  const exp = session.sessionExpiresAt.value;
+  const exp = rawExpiresAt.value;
   if (exp == null) return null;
   const ms = exp - Date.now();
   if (ms <= 0) return 0;
@@ -171,11 +180,11 @@ const expiresInMinValue = computed<number | null>(() => {
 });
 
 const userName = computed(() => {
-  const u = session.userData.value;
+  const u = sessionUserData.value;
   return u ? `${u.name} ${u.lastname}` : null;
 });
 
-const isLoading = computed(() => session.loading.value);
+const isLoading = computed(() => sessionLoading.value);
 
 function onClickOutside(e: MouseEvent) {
   if (!open.value) return;
@@ -185,17 +194,10 @@ function onClickOutside(e: MouseEvent) {
 }
 
 async function onFormSubmit(e: Event) {
-  // El <form @submit.prevent="onFormSubmit"> se dispara con click
-  // en cualquiera de los dos botones (login o logout). Decidimos
-  // según el estado de la sesión.
   e.preventDefault();
-  if (session.isLoggedIn.value) {
-    // Hay sesión real → cerrar
+  if (isLoggedIn.value) {
     session.logout();
   } else {
-    // No hay sesión → abrir dropdown y dejar que el user vea el botón Login
-    // (que se mostrará cuando recargue o cuando llegue el watch de accounts)
-    // Por seguridad, no auto-logineamos desde el botón Cerrar sin sesión.
     open.value = false;
   }
 }
@@ -215,17 +217,12 @@ async function onSwitch(accountId: string) {
     return;
   }
   open.value = false;
-  // Logout de la cuenta anterior ANTES de cambiar (no mezclar sesiones)
-  if (session.isLoggedIn.value) {
+  if (isLoggedIn.value) {
     session.logout();
   }
-  // setActiveAccount actualiza active_account_id + email en una
-  // operación atómica. Si la cuenta no existe, no hace nada.
   const result = await cfg.setActiveAccount(accountId);
   if (!result) return;
-  // El watch de usePromoritzSession carga la sesión de la nueva cuenta
-  // (si existe en localStorage). Si no, hay que re-loguear.
-  if (!session.isLoggedIn.value) {
+  if (!isLoggedIn.value) {
     await session.login();
   }
 }

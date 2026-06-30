@@ -24,7 +24,7 @@ export interface ConfiguracionSistema {
   email: string; // email de la cuenta activa (denormalizado para queries rápidas)
   delayMinSegundos: number; // 3
   delayMaxSegundos: number; // 7
-  activeAccountId?: string; // FK a accounts
+  activeAccountId: string | null; // FK a accounts; null cuando se borra la activa
 }
 
 // ── Logs de Inscripción ──

@@ -32,7 +32,7 @@ export function useConfiguracion() {
       email: row.email,
       delayMinSegundos: row.delay_min_segundos,
       delayMaxSegundos: row.delay_max_segundos,
-      activeAccountId: row.active_account_id ?? undefined,
+      activeAccountId: row.active_account_id,
     };
   }
 
@@ -58,8 +58,9 @@ export function useConfiguracion() {
     if (patch.email !== undefined) update.email = patch.email;
     if (patch.delayMinSegundos !== undefined) update.delay_min_segundos = patch.delayMinSegundos;
     if (patch.delayMaxSegundos !== undefined) update.delay_max_segundos = patch.delayMaxSegundos;
-    if (patch.activeAccountId !== undefined) {
-      update.active_account_id = patch.activeAccountId;
+    if ("activeAccountId" in patch) {
+      // Permitir explícitamente null (limpiar) o string (setear)
+      update.active_account_id = patch.activeAccountId ?? null;
     }
 
     const { error: e } = await sb

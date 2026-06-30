@@ -172,8 +172,13 @@ async function onAdd() {
   addError.value = null;
   try {
     const acc = await accounts.addAccount(newEmail.value);
-    // Si es la primera cuenta, activarla y actualizar el email
-    if (accounts.accounts.value.length === 1) {
+    // Si no hay cuenta activa, o la activa ya no existe en accounts,
+    // activar la nueva y actualizar el email.
+    const activeId = cfg.config.value?.activeAccountId;
+    const activeExists = activeId
+      ? accounts.accounts.value.some((a) => a.id === activeId)
+      : false;
+    if (!activeExists) {
       await cfg.update({ activeAccountId: acc.id, email: acc.email });
       emailAnterior = acc.email;
     }
@@ -213,6 +218,14 @@ async function onRemove(accountId: string, email: string) {
   )
     return;
   try {
+    // Si es la cuenta activa, limpiar el estado de configuracion y la sesión
+    // antes de borrar, para no dejar emails huérfanos apuntando a cuentas
+    // inexistentes (que causarían login en promoritz como un usuario distinto).
+    if (cfg.config.value?.activeAccountId === accountId) {
+      session.logout();
+      await cfg.update({ activeAccountId: null, email: "" });
+      emailAnterior = "";
+    }
     await accounts.removeAccount(accountId);
   } catch (e) {
     alert("Error al quitar: " + (e instanceof Error ? e.message : String(e)));

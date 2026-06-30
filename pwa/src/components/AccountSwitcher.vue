@@ -45,29 +45,31 @@
       </div>
 
       <!-- Acción de login/logout de la cuenta activa -->
-      <form
+      <div
         v-if="activeAccount"
+        :key="`login-${session.isLoggedIn ? 'in' : 'out'}`"
         class="p-2 border-b bg-gray-50 flex gap-2"
-        @submit.prevent="onFormSubmit"
       >
         <button
           v-if="!session.isLoggedIn"
-          type="submit"
+          type="button"
           class="flex-1 bg-blue-600 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
           :disabled="isLoading"
+          @click="onLogin"
         >
           <i class="pi pi-sign-in text-xs" />
           {{ isLoading ? "…" : "Login" }}
         </button>
         <button
           v-else
-          type="submit"
+          type="button"
           class="flex-1 bg-red-500 text-white text-sm font-semibold px-3 py-2 rounded hover:bg-red-600 cursor-pointer"
+          @click="onLogout"
         >
           <i class="pi pi-sign-out text-xs" />
           Cerrar sesión
         </button>
-      </form>
+      </div>
 
       <!-- Lista de cuentas para switchear -->
       <div class="p-3 border-b">

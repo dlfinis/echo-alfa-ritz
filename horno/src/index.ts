@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 import { RotacionCiclicaRule } from "@echo-alfa-ritz/shared";
 import { DirectInjector } from "./directInjector.js";

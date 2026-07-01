@@ -17,6 +17,16 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 const rule = new RotacionCiclicaRule();
 
+const antibotDelayMin = Number(process.env.ANTIBOT_DELAY_MIN ?? 3000);
+const antibotDelayMax = Number(process.env.ANTIBOT_DELAY_MAX ?? 7000);
+const antibotDelayEnabled = process.env.ANTIBOT_DELAY_ENABLED !== "false";
+
+if (antibotDelayEnabled) {
+  console.log(`[horno] delay anti-bot: ${antibotDelayMin}-${antibotDelayMax}ms`);
+} else {
+  console.log("[horno] delay anti-bot desactivado");
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -82,8 +92,9 @@ async function run(): Promise<void> {
         console.error("[horno] error al insertar log:", error.message);
       }
 
-      // Delay anti-bot: entre 3 y 7 segundos
-      await sleep(3000 + Math.random() * 4000);
+      if (antibotDelayEnabled) {
+        await sleep(antibotDelayMin + Math.random() * (antibotDelayMax - antibotDelayMin));
+      }
     }
   }
 
